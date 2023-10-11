@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@atproto/api": "^0.6.20",
+    "cron": "^3.1.0",
+    "dotenv": "^16.3.1",
+    "process": "^0.11.10"
+  }
+}
