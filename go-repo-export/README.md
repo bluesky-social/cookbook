@@ -11,7 +11,7 @@ You need the Go programming language toolchain installed: <https://go.dev/doc/in
 You can directly install and run the command (without a git checkout):
 
 ```shell
-go install github.com/bluesky-social/indigo/cmd/gosky@latest
+go install github.com/bluesky-social/cookbook/go-repo-export@latest
 
 go-export-repo [...]
 ```
