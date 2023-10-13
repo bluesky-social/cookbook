@@ -34,6 +34,10 @@ func run() error {
 		return carList(os.Args[2])
 	case "unpack":
 		return carUnpack(os.Args[2])
+	case "list-blobs":
+		return blobList(os.Args[2])
+	case "download-blobs":
+		return blobDownloadAll(os.Args[2])
 	default:
 		return fmt.Errorf("unexpected command: %s", os.Args[1])
 	}
@@ -163,6 +167,98 @@ func carUnpack(carPath string) error {
 	})
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func blobList(raw string) error {
+	ctx := context.Background()
+	atid, err := syntax.ParseAtIdentifier(raw)
+	if err != nil {
+		return err
+	}
+
+	// first look up the DID and PDS for this repo
+	dir := identity.DefaultDirectory()
+	ident, err := dir.Lookup(ctx, *atid)
+	if err != nil {
+		return err
+	}
+
+	// create a new API client to connect to the account's PDS
+	xrpcc := xrpc.Client{
+		Host: ident.PDSEndpoint(),
+	}
+	if xrpcc.Host == "" {
+		return fmt.Errorf("no PDS endpoint for identity")
+	}
+
+	cursor := ""
+	for {
+		resp, err := comatproto.SyncListBlobs(ctx, &xrpcc, cursor, ident.DID.String(), 500, "")
+		if err != nil {
+			return err
+		}
+		for _, cidStr := range resp.Cids {
+			fmt.Println(cidStr)
+		}
+		if resp.Cursor != nil && *resp.Cursor != "" {
+			cursor = *resp.Cursor
+		} else {
+			break
+		}
+	}
+	return nil
+}
+
+func blobDownloadAll(raw string) error {
+	ctx := context.Background()
+	atid, err := syntax.ParseAtIdentifier(raw)
+	if err != nil {
+		return err
+	}
+
+	// first look up the DID and PDS for this repo
+	dir := identity.DefaultDirectory()
+	ident, err := dir.Lookup(ctx, *atid)
+	if err != nil {
+		return err
+	}
+
+	// create a new API client to connect to the account's PDS
+	xrpcc := xrpc.Client{
+		Host: ident.PDSEndpoint(),
+	}
+	if xrpcc.Host == "" {
+		return fmt.Errorf("no PDS endpoint for identity")
+	}
+
+	topDir := ident.DID.String() + "/_blob"
+	fmt.Printf("writing blobs to: %s\n", topDir)
+	os.MkdirAll(topDir, os.ModePerm)
+
+	cursor := ""
+	for {
+		resp, err := comatproto.SyncListBlobs(ctx, &xrpcc, cursor, ident.DID.String(), 500, "")
+		if err != nil {
+			return err
+		}
+		for _, cidStr := range resp.Cids {
+			blobBytes, err := comatproto.SyncGetBlob(ctx, &xrpcc, cidStr, ident.DID.String())
+			if err != nil {
+				return err
+			}
+			blobPath := topDir + "/" + cidStr
+			fmt.Println(blobPath)
+			if err := os.WriteFile(blobPath, blobBytes, 0666); err != nil {
+				return err
+			}
+		}
+		if resp.Cursor != nil && *resp.Cursor != "" {
+			cursor = *resp.Cursor
+		} else {
+			break
+		}
 	}
 	return nil
 }
