@@ -30,7 +30,7 @@ func run() error {
 	switch os.Args[1] {
 	case "download":
 		return carDownload(os.Args[2])
-	case "ls":
+	case "list-records":
 		return carList(os.Args[2])
 	case "unpack":
 		return carUnpack(os.Args[2])
@@ -41,7 +41,6 @@ func run() error {
 	default:
 		return fmt.Errorf("unexpected command: %s", os.Args[1])
 	}
-	return nil
 }
 
 func carDownload(raw string) error {
@@ -244,15 +243,19 @@ func blobDownloadAll(raw string) error {
 			return err
 		}
 		for _, cidStr := range resp.Cids {
+			blobPath := topDir + "/" + cidStr
+			if _, err := os.Stat(blobPath); err == nil {
+				fmt.Printf("%s\texists\n", blobPath)
+				continue
+			}
 			blobBytes, err := comatproto.SyncGetBlob(ctx, &xrpcc, cidStr, ident.DID.String())
 			if err != nil {
 				return err
 			}
-			blobPath := topDir + "/" + cidStr
-			fmt.Println(blobPath)
 			if err := os.WriteFile(blobPath, blobBytes, 0666); err != nil {
 				return err
 			}
+			fmt.Printf("%s\tdownloaded\n", blobPath)
 		}
 		if resp.Cursor != nil && *resp.Cursor != "" {
 			cursor = *resp.Cursor
