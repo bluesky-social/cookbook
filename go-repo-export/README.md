@@ -31,7 +31,7 @@ go build ./...
 Commands which talk to the target account's PDS instance:
 
 ```shell
-go-export-repo download <at-identifier>
+go-export-repo download-repo <at-identifier>
 go-export-repo list-blobs <at-identifier>
 go-export-repo download-blobs <at-identifier>
 ```
@@ -40,13 +40,13 @@ Which work with a local repo CAR file:
 
 ```shell
 go-export-repo list-records <did.car>
-go-export-repo unpack <did.car>
+go-export-repo unpack-records <did.car>
 ```
 
 For example:
 
 ```shell
-> ./go-export-repo download atproto.com
+> ./go-export-repo download-repo atproto.com
 resolving identity: atproto.com
 downloading from https://bsky.social to: did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
 
@@ -59,7 +59,7 @@ app.bsky.feed.like/3jucahkymkk2e	bafyreidqrmqvrnz52efgqfavvjdbwob3bc2g3vvgmhmexg
 app.bsky.feed.like/3jucaj3qgmk2h	bafyreig5c2atahtzr2vo4v64aovgqbv6qwivfwf3ex5gn2537wwmtnkm3e
 [...]
 
-> ./go-export-repo unpack did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
+> ./go-export-repo unpack-records did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
 writing output to: did:plc:ewvi7nxzyoun6zhxrhs64oiz
 did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.bsky.actor.profile/self.json
 did:plc:ewvi7nxzyoun6zhxrhs64oiz/app.bsky.feed.like/3jucagnrmn22x.json

@@ -28,11 +28,11 @@ func run() error {
 		return fmt.Errorf("expected two args: <command> <target>")
 	}
 	switch os.Args[1] {
-	case "download":
+	case "download-repo":
 		return carDownload(os.Args[2])
 	case "list-records":
 		return carList(os.Args[2])
-	case "unpack":
+	case "unpack-records":
 		return carUnpack(os.Args[2])
 	case "list-blobs":
 		return blobList(os.Args[2])
@@ -82,6 +82,7 @@ func carList(carPath string) error {
 		return err
 	}
 
+	// read repository tree in to memory
 	r, err := repo.ReadRepoFromCar(ctx, fi)
 	if err != nil {
 		return err
@@ -94,7 +95,6 @@ func carList(carPath string) error {
 		return err
 	}
 
-	// extract DID from repo commit
 	fmt.Printf("=== %s ===\n", did)
 	fmt.Println("key\trecord_cid")
 
