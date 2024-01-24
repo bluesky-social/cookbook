@@ -357,13 +357,14 @@ def main():
     )
     parser.add_argument("--handle", default=os.environ.get("ATP_AUTH_HANDLE"))
     parser.add_argument("--password", default=os.environ.get("ATP_AUTH_PASSWORD"))
-    parser.add_argument("text", default="")
+    parser.add_argument("--text", default="", help="specify message in single line")
     parser.add_argument("--image", action="append")
     parser.add_argument("--alt-text")
     parser.add_argument("--lang", action="append")
     parser.add_argument("--reply-to")
     parser.add_argument("--embed-url")
     parser.add_argument("--embed-ref")
+    parser.add_argument("--textfile", type=argparse.FileType("r"), default="-", help="specify textfile for message to post, default:stdin (type CTRL-D for end of message in case of using stdin)")
     args = parser.parse_args()
     if not (args.handle and args.password):
         print("both handle and password are required", file=sys.stderr)
@@ -371,6 +372,11 @@ def main():
     if args.image and len(args.image) > 4:
         print("at most 4 images per post", file=sys.stderr)
         sys.exit(-1)
+    if args.text in ["", None]:
+        # read text from file
+        content = args.textfile.read()
+        args.text = content
+
     create_post(args)
 
 
