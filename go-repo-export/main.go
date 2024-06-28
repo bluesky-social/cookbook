@@ -9,6 +9,8 @@ import (
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	_ "github.com/bluesky-social/indigo/api/bsky"
+	_ "github.com/bluesky-social/indigo/api/chat"
+	_ "github.com/bluesky-social/indigo/api/ozone"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/repo"
