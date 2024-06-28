@@ -11,5 +11,5 @@ This code is described in the blog post ["Posting via the Bluesky API"](https://
 For a list of options and arguments:
 
 ```shell
-./create_bsky_post.pycreate_bsky_post.py
+./create_bsky_post.py
 ```
