@@ -1,4 +1,4 @@
-module github.com/bluesky-social/cookbook/go-export-repo
+module github.com/bluesky-social/cookbook/go-repo-export
 
 go 1.21.0
 
