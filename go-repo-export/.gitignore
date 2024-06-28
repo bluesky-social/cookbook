@@ -1,3 +1,6 @@
-go-export-repo
+go-repo-export
 *.car
 did:*
+
+# Don't ignore this file itself, or other specific dotfiles
+!.gitignore

@@ -5,9 +5,9 @@ set -e
 set -u
 
 go build .
-./go-export-repo download-repo atproto.com
-./go-export-repo list-records did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
-./go-export-repo unpack-records did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
-./go-export-repo list-blobs atproto.com
-./go-export-repo list-blobs did:plc:ewvi7nxzyoun6zhxrhs64oiz
-./go-export-repo download-blobs atproto.com
+./go-repo-export download-repo atproto.com
+./go-repo-export list-records did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
+./go-repo-export unpack-records did:plc:ewvi7nxzyoun6zhxrhs64oiz.car
+./go-repo-export list-blobs atproto.com
+./go-repo-export list-blobs did:plc:ewvi7nxzyoun6zhxrhs64oiz
+./go-repo-export download-blobs atproto.com
