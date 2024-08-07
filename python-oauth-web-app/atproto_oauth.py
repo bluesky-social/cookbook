@@ -1,7 +1,8 @@
 
 from urllib.parse import urlparse
+import requests
 
-def valid_authsrv_metadata(obj, url):
+def valid_authsrv_meta(obj, url):
     fetch_url = urlparse(url)
     issuer_url = urlparse(obj["issuer"])
     assert issuer_url.hostname == fetch_url.hostname
@@ -33,18 +34,27 @@ def valid_authsrv_metadata(obj, url):
 
     return True
 
-# NOTE: just showing how to configure fully? don't need all these fields
-#sess = OAuth2Session(
-#        client_id=client_id,
-#        #authorization_endpoint=authsrv_meta["authorization_endpoint"],
-#        #token_endpoint=authsrv_meta["token_endpoint"],
-#        #token_endpoint_auth_method="private_key_jwt",
-#        #revocation_endpoint=authsrv_meta["revocation_endpoint"],
-#        #revocation_endpoint_auth_method="private_key_jwt",
-#        #state=state,
-#        #redirect_uri=redirect_uri,
-#        #scope=scope,
-#        code_challenge_method="S256",
-#        #code_verifier=state,
-#)
-#uri, _ = sess.create_authorization_url(authsrv_meta["authorization_endpoint"], code_verifier=state)
+def fetch_authsrv_meta(url):
+    # TODO: ensure URL is safe
+    # fetch auth server metadata
+    resp = requests.get(f"{url}/.well-known/oauth-authorization-server")
+    resp.raise_for_status()
+    
+    authsrv_meta = resp.json()
+    #print("Auth Server Metadata: " + json.dumps(authsrv_meta, indent=2))
+    assert valid_authsrv_meta(authsrv_meta, url)
+    return authsrv_meta
+
+# TODO: not actually using this, because it doesn't support DPoP yet
+def oauth_client(request, authsrv_meta):
+    sess = OAuth2Session(
+            client_id=client_id,
+            authorization_endpoint=authsrv_meta["authorization_endpoint"],
+            token_endpoint=authsrv_meta["token_endpoint"],
+            token_endpoint_auth_method="private_key_jwt",
+            revocation_endpoint=authsrv_meta["revocation_endpoint"],
+            revocation_endpoint_auth_method="private_key_jwt",
+            redirect_uri=redirect_uri,
+            code_challenge_method="S256",
+    )
+    return sess

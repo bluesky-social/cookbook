@@ -4,7 +4,8 @@
   <h1>atproto OAuth Flask Backend Demo</h1>
   <ul>
     {% if g.user %}
-      <li><span>{{ g.user['username'] }}</span>
+      <li><span>Hello @{{ g.user['handle'] }}</span>
+      <li><a href="{{ url_for('bsky_post') }}">Create Post</a>
       <li><a href="{{ url_for('oauth_logout') }}">Log Out</a>
     {% else %}
       <li><a href="{{ url_for('oauth_login') }}">Log In</a>
