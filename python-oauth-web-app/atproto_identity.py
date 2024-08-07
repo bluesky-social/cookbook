@@ -32,20 +32,20 @@ def resolve_handle(handle):
     try:
         resp = requests.get(f"https://{handle}/.well-known/atproto-did")
     except requests.exceptions.ConnectionError:
-        raise Exception("handle not found")
+        return None
     if resp.status_code != 200:
-        raise Exception("handle not found")
+        return None
     did = resp.text.split()[0]
     if valid_did(did):
         return did
-    raise Exception("handle not found")
+    return None
 
 
 def resolve_did(did):
     if did.startswith("did:plc:"):
         resp = requests.get(f"https://plc.directory/{did}")
         if resp.status_code != 200:
-            raise Exception("DID not found")
+            return None
         return resp.json()
 
     if did.startswith("did:web:"):
@@ -53,9 +53,9 @@ def resolve_did(did):
         try:
             resp = requests.get(f"https://{domain}/.well-known/did.json")
         except requests.exceptions.ConnectionError:
-            raise Exception("DID not found")
+            return None
         if resp.status_code != 200:
-            raise Exception("DID not found")
+            return None
         return resp.json()
 
 

@@ -13,6 +13,7 @@ from flask import (
     request,
     g,
     session,
+    abort,
 )
 from authlib.jose import JsonWebKey
 from authlib.common.security import generate_token
@@ -93,6 +94,16 @@ def login_required(view):
     return wrapped_view
 
 
+@app.errorhandler(500)
+def internal_server_error(e):
+    return render_template("error.html", status_code=500, err=e), 500
+
+
+@app.errorhandler(400)
+def bad_request_error(e):
+    return render_template("error.html", status_code=400, err=e), 400
+
+
 @app.route("/")
 def homepage():
     return render_template("home.html")
@@ -140,12 +151,18 @@ def oauth_login():
     username = request.form["username"]
     if not valid_handle(username):
         flash("Invalid Handle")
-        return redirect("/oauth/login")
+        return render_template("login.html"), 400
     did = resolve_handle(username)
+    if not did:
+        flash("Handle Not Found")
+        return render_template("login.html"), 400
     if not valid_did(did):
-        flash("Invalid DID")
-        return redirect("/oauth/login")
+        flash("Handle resolved to invalid DID")
+        return render_template("login.html"), 400
     did_doc = resolve_did(did)
+    if not did_doc:
+        flash("DID Not Found: " + did)
+        return render_template("login.html"), 400
     pds_url = pds_endpoint(did_doc)
 
     # TODO: validate that pds_url is safe before doing request!
@@ -159,7 +176,12 @@ def oauth_login():
     # TODO: validate that authsrv_url is safe before doing request!
     print(f"Auth Server: {authsrv_url}")
 
-    authsrv_meta = fetch_authsrv_meta(authsrv_url)
+    try:
+        authsrv_meta = fetch_authsrv_meta(authsrv_url)
+    except Exception as err:
+        print(err)
+        flash("Failed to fetch PDS OAuth metadata")
+        return render_template("login.html"), 400
 
     par_url = authsrv_meta["pushed_authorization_request_endpoint"]
     issuer = authsrv_meta["issuer"]
@@ -242,7 +264,7 @@ def oauth_authorize():
         one=True,
     )
     if row is None:
-        raise Exception("OAuth request not found")
+        abort(400, "OAuth request not found")
 
     dpop_key = JsonWebKey.import_key(json.loads(row["dpop_private_jwk"]))
     dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
@@ -341,7 +363,7 @@ def oauth_authorize():
 
     session["user_did"] = row["did"]
 
-    return redirect("/")
+    return redirect("/bsky/post")
 
 
 @login_required
@@ -400,5 +422,5 @@ def bsky_post():
     print(resp.json())
     resp.raise_for_status()
 
-    flash("Posted!")
+    flash("Post record created in PDS!")
     return render_template("bsky_post.html")
