@@ -22,7 +22,7 @@ assert 'd' not in pub_jwk
 def get_db():
     db = getattr(g, '_database', None)
     if db is None:
-        db_path = app.config.get("DATABASE_URL", "app.sqlite")
+        db_path = app.config.get("DATABASE_URL", "demo.sqlite")
         db = g._database = sqlite3.connect(db_path)
         db.row_factory = sqlite3.Row
     return db
