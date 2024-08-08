@@ -1,5 +1,4 @@
 from urllib.parse import urlparse
-import requests
 import time
 import json
 from authlib.jose import JsonWebKey
@@ -7,7 +6,7 @@ from authlib.common.security import generate_token
 from authlib.jose import jwt
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
-from security import is_safe_url
+from atproto_security import is_safe_url, hardened_http
 
 
 def valid_authsrv_meta(obj, url):
@@ -43,11 +42,12 @@ def valid_authsrv_meta(obj, url):
     return True
 
 
+# gets Authorization Server (entryway) metadata, as dict
 def fetch_authsrv_meta(url):
-    # TODO: ensure URL is safe
-    # fetch auth server metadata
+    # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(url)
-    resp = requests.get(f"{url}/.well-known/oauth-authorization-server")
+    with hardened_http.get_session() as sess:
+        resp = sess.get(f"{url}/.well-known/oauth-authorization-server")
     resp.raise_for_status()
 
     authsrv_meta = resp.json()
@@ -99,13 +99,14 @@ def send_par_auth_request(authsrv_url, authsrv_meta, account_did, app_url, secre
         "client_assertion": client_assertion,
     }
     # print(par_body)
-    # TODO: check that URL is safe
+    # IMPORTANT: Pushed Authorization Request URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(par_url)
-    resp = requests.post(
-        par_url,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data=par_body,
-    )
+    with hardened_http.get_session() as sess:
+        resp = sess.post(
+            par_url,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data=par_body,
+        )
     # print(resp.json())
     return pkce_verifier, state, nonce, resp
 
@@ -160,11 +161,12 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
         dpop_key,
     ).decode("utf-8")
 
-    print(params)
-    # TODO: check if safe URL
-    assert is_safe_url(token_url)
+    # print(params)
     dpop_nonce = ""
-    resp = requests.post(token_url, data=params, headers={"DPoP": dpop_proof})
+    # IMPORTANT: Token URL is untrusted input, SSRF mitigations are needed
+    assert is_safe_url(token_url)
+    with hardened_http.get_session() as sess:
+        resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
     if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
         # print(resp.headers)
         server_nonce = resp.headers["DPoP-Nonce"]  # Dpop-Nonce
@@ -181,7 +183,10 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
             },
             dpop_key,
         ).decode("utf-8")
-        resp = requests.post(token_url, data=params, headers={"DPoP": dpop_proof})
+        # IMPORTANT: Token URL is untrusted input, SSRF mitigations are needed
+        assert is_safe_url(token_url)
+        with hardened_http.get_session() as sess:
+            resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
 
     # print(resp.json())
     resp.raise_for_status()
@@ -201,7 +206,7 @@ def pds_auth_req(method, url, user, db, body=None):
     access_token = user["access_token"]
 
     for i in range(2):
-        #print(f"access with nonce: {dpop_nonce}")
+        # print(f"access with nonce: {dpop_nonce}")
         dpop_jwt = jwt.encode(
             {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
             {
@@ -218,18 +223,20 @@ def pds_auth_req(method, url, user, db, body=None):
             dpop_key,
         ).decode("utf-8")
 
-        resp = requests.post(
-            url,
-            headers={"Authorization": f"DPoP {access_token}", "DPoP": dpop_jwt},
-            json=body,
-        )
+        with hardened_http.get_session() as sess:
+            resp = sess.post(
+                url,
+                headers={"Authorization": f"DPoP {access_token}", "DPoP": dpop_jwt},
+                json=body,
+            )
         if resp.status_code in [400, 401] and resp.json()["error"] == "use_dpop_nonce":
             # print(resp.headers)
             dpop_nonce = resp.headers["DPoP-Nonce"]
             # update session database with new nonce
             cur = db.cursor()
             cur.execute(
-                "UPDATE oauth_session SET dpop_nonce = ? WHERE did = ?;", [dpop_nonce, user["did"]]
+                "UPDATE oauth_session SET dpop_nonce = ? WHERE did = ?;",
+                [dpop_nonce, user["did"]],
             )
             db.commit()
             cur.close()

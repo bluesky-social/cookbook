@@ -22,7 +22,7 @@ from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
 from atproto_identity import *
 from atproto_oauth import *
-from security import is_safe_url
+from atproto_security import is_safe_url, hardened_http
 
 app = Flask(__name__)
 app.config.from_prefixed_env()
@@ -165,22 +165,21 @@ def oauth_login():
     if not did_doc:
         flash("DID Not Found: " + did)
         return render_template("login.html"), 400
+
+    # fetch PDS OAuth metadata
+    # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
     pds_url = pds_endpoint(did_doc)
-
     print(f"PDS: {pds_url}")
-
-    # fetch PDS metadata
-    # TODO: validate that pds_url is safe before doing request!
     assert is_safe_url(pds_url)
-    resp = requests.get(f"{pds_url}/.well-known/oauth-protected-resource")
+    with hardened_http.get_session() as sess:
+        resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
     resp.raise_for_status()
-    authsrv_url = resp.json()["authorization_servers"][0]
 
+    # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
+    authsrv_url = resp.json()["authorization_servers"][0]
     print(f"Auth Server: {authsrv_url}")
     assert is_safe_url(authsrv_url)
-
     try:
-        # TODO: validate that authsrv_url is safe before doing request!
         authsrv_meta = fetch_authsrv_meta(authsrv_url)
     except Exception as err:
         print(err)
@@ -205,10 +204,19 @@ def oauth_login():
     print(f"saving oauth_auth_request to DB: {state}")
     query_db(
         "INSERT INTO oauth_auth_request (state, iss, nonce, pkce_verifier, dpop_private_jwk, did, handle, pds_url) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
-        [state, authsrv_meta["issuer"], nonce, pkce_verifier, dpop_private_jwk, did, username, pds_url],
+        [
+            state,
+            authsrv_meta["issuer"],
+            nonce,
+            pkce_verifier,
+            dpop_private_jwk,
+            did,
+            username,
+            pds_url,
+        ],
     )
 
-    # TODO: check that this is safe URL to redirect user to
+    # IMPORTANT: Authorization endpoint URL is untrusted input, security mitigations are needed before redirecting user
     auth_url = authsrv_meta["authorization_endpoint"]
     assert is_safe_url(auth_url)
     qparam = urlencode({"client_id": client_id, "request_uri": request_uri})
@@ -217,7 +225,7 @@ def oauth_login():
 
 @app.route("/oauth/authorize")
 def oauth_authorize():
-    #print(request.args)
+    # print(request.args)
     row = query_db(
         "SELECT * FROM oauth_auth_request WHERE state = ?;",
         [request.args["state"]],
@@ -227,16 +235,16 @@ def oauth_authorize():
         abort(400, "OAuth request not found")
 
     # delete row to prevent replay
-    query_db(
-        "DELETE FROM oauth_auth_request WHERE state = ?;", [request.args["state"]]
-    )
+    query_db("DELETE FROM oauth_auth_request WHERE state = ?;", [request.args["state"]])
 
     # verify query param "iss" against earlier oauth request "iss"
     assert row["iss"] == request.args["iss"]
     assert row["state"] == request.args["state"]
 
     app_url = request.url_root.replace("http://", "https://")
-    tokens, dpop_nonce = complete_auth_request(row, request.args["code"], app_url, secret_jwk)
+    tokens, dpop_nonce = complete_auth_request(
+        row, request.args["code"], app_url, secret_jwk
+    )
 
     # save session in database
     query_db(

@@ -4,6 +4,8 @@ import json
 import requests
 import dns.resolver
 
+from atproto_security import is_safe_url, hardened_http
+
 HANDLE_REGEX = r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
 DID_REGEX = r"^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$"
 
@@ -29,8 +31,10 @@ def resolve_handle(handle):
         pass
 
     # then try HTTP well-known
+    # IMPORTANT: 'handle' domain is untrusted user input. SSRF mitigations are neccessary
     try:
-        resp = requests.get(f"https://{handle}/.well-known/atproto-did")
+        with hardened_http.get_session() as sess:
+            resp = sess.get(f"https://{handle}/.well-known/atproto-did")
     except requests.exceptions.ConnectionError:
         return None
     if resp.status_code != 200:
@@ -43,6 +47,7 @@ def resolve_handle(handle):
 
 def resolve_did(did):
     if did.startswith("did:plc:"):
+        # NOTE: 'did' is untrusted input, but has been validated by regex by this point
         resp = requests.get(f"https://plc.directory/{did}")
         if resp.status_code != 200:
             return None
@@ -50,8 +55,12 @@ def resolve_did(did):
 
     if did.startswith("did:web:"):
         domain = did[8:]
+        # IMPORTANT: domain is untrusted input. SSRF mitigations are neccessary
+        # "handle" validation works to check that domain is a simple hostname
+        assert valid_handle(domain)
         try:
-            resp = requests.get(f"https://{domain}/.well-known/did.json")
+            with hardened_http.get_session() as sess:
+                resp = sess.get(f"https://{domain}/.well-known/did.json")
         except requests.exceptions.ConnectionError:
             return None
         if resp.status_code != 200:
