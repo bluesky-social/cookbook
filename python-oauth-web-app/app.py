@@ -22,6 +22,7 @@ from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
 from atproto_identity import *
 from atproto_oauth import *
+from security import is_safe_url
 
 app = Flask(__name__)
 app.config.from_prefixed_env()
@@ -111,23 +112,24 @@ def homepage():
 
 @app.route("/oauth/client-metadata.json")
 def oauth_client_metadata():
-    client_id = request.base_url.replace("http://", "https://")
-    url_root = request.url_root.replace("http://", "https://")
+    app_url = request.url_root.replace("http://", "https://")
+    client_id = f"{app_url}oauth/client-metadata.json"
+
     return jsonify(
         {
             # simply using the full request URL for the client_id
             "client_id": client_id,
             "dpop_bound_access_tokens": True,
             "application_type": "web",
-            "redirect_uris": [f"{url_root}oauth/authorize"],
-            "client_uri": url_root,
+            "redirect_uris": [f"{app_url}oauth/authorize"],
+            "client_uri": app_url,
             "subject_type": "public",
-            "grant_types": ["authorization_code", "refresh_token"],  # TODO: implicit?
+            "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],  # TODO: "code id_token"?
             "scope": "openid profile offline_access",
             "client_name": "atproto OAuth Flask Backend Demo",
             "token_endpoint_auth_method": "none",
-            "jwks_uri": f"{url_root}oauth/jwks.json",
+            "jwks_uri": f"{app_url}oauth/jwks.json",
             # "jwks": { #    "keys": [pub_jwk], #},
         }
     )
@@ -147,7 +149,7 @@ def oauth_login():
     if request.method != "POST":
         return render_template("login.html")
 
-    # resolve handle and DID document
+    # resolve handle and DID document, using atproto identity helpers
     username = request.form["username"]
     if not valid_handle(username):
         flash("Invalid Handle")
@@ -165,205 +167,103 @@ def oauth_login():
         return render_template("login.html"), 400
     pds_url = pds_endpoint(did_doc)
 
-    # TODO: validate that pds_url is safe before doing request!
     print(f"PDS: {pds_url}")
 
     # fetch PDS metadata
+    # TODO: validate that pds_url is safe before doing request!
+    assert is_safe_url(pds_url)
     resp = requests.get(f"{pds_url}/.well-known/oauth-protected-resource")
     resp.raise_for_status()
     authsrv_url = resp.json()["authorization_servers"][0]
 
-    # TODO: validate that authsrv_url is safe before doing request!
     print(f"Auth Server: {authsrv_url}")
+    assert is_safe_url(authsrv_url)
 
     try:
+        # TODO: validate that authsrv_url is safe before doing request!
         authsrv_meta = fetch_authsrv_meta(authsrv_url)
     except Exception as err:
         print(err)
-        flash("Failed to fetch PDS OAuth metadata")
+        flash("Failed to fetch Auth Server (Entryway) OAuth metadata")
         return render_template("login.html"), 400
 
-    par_url = authsrv_meta["pushed_authorization_request_endpoint"]
-    issuer = authsrv_meta["issuer"]
-    state = generate_token()
-    nonce = generate_token()
-    pkce_verifier = generate_token(48)
-    url_root = request.url_root.replace("http://", "https://")
-    redirect_uri = f"{url_root}oauth/authorize"
-    client_id = f"{url_root}oauth/client-metadata.json"
-    scope = "openid profile offline_access"
+    app_url = request.url_root.replace("http://", "https://")
+    client_id = f"{app_url}oauth/client-metadata.json"
 
-    # generate PKCE code_challenge, and use it for PAR request
-    code_challenge = create_s256_code_challenge(pkce_verifier)
-    code_challenge_method = "S256"
-
-    # self-signed JWT using the private key declared in client metadata JWKS
-    client_assertion = jwt.encode(
-        {"alg": "ES256", "kid": secret_jwk["kid"]},
-        {
-            "iss": client_id,
-            "sub": client_id,
-            "aud": authsrv_url,
-            "jti": generate_token(),
-            "iat": int(time.time()),
-        },
-        secret_jwk,
-    ).decode("utf-8")
-
-    par_body = {
-        "response_type": "code",
-        "code_challenge": code_challenge,
-        "code_challenge_method": code_challenge_method,
-        "client_id": client_id,
-        "state": state,
-        "nonce": nonce,
-        "redirect_uri": redirect_uri,
-        "scope": scope,
-        "login_hint": did,
-        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        "client_assertion": client_assertion,
-    }
-    print(par_body)
-    resp = requests.post(
-        par_url,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data=par_body,
+    pkce_verifier, state, nonce, resp = send_par_auth_request(
+        authsrv_url, authsrv_meta, did, app_url, secret_jwk
     )
-    print(resp.json())
     resp.raise_for_status()
     request_uri = resp.json()["request_uri"]
 
-    # persist session state to database
+    # create a DPoP keypair for this user session now (TODO: why now?)
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True).as_json(
         is_private=True
     )
-    print(f"saving oauth_request to DB: {state}")
+
+    # persist auth request to database
+    print(f"saving oauth_auth_request to DB: {state}")
     query_db(
-        "INSERT INTO oauth_request (state, iss, nonce, pkce_verifier, dpop_private_jwk, did, handle, pds_url) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
-        [state, issuer, nonce, pkce_verifier, dpop_private_jwk, did, username, pds_url],
+        "INSERT INTO oauth_auth_request (state, iss, nonce, pkce_verifier, dpop_private_jwk, did, handle, pds_url) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        [state, authsrv_meta["issuer"], nonce, pkce_verifier, dpop_private_jwk, did, username, pds_url],
     )
 
-    # TODO: check that this is safe URL
+    # TODO: check that this is safe URL to redirect user to
     auth_url = authsrv_meta["authorization_endpoint"]
+    assert is_safe_url(auth_url)
     qparam = urlencode({"client_id": client_id, "request_uri": request_uri})
     return redirect(f"{auth_url}?{qparam}")
 
 
-@app.route("/oauth/logout")
-def oauth_logout():
-    session.clear()
-    return redirect("/")
-
-
 @app.route("/oauth/authorize")
 def oauth_authorize():
-    print(request.args)
+    #print(request.args)
     row = query_db(
-        "SELECT * FROM oauth_request WHERE state = ?;",
+        "SELECT * FROM oauth_auth_request WHERE state = ?;",
         [request.args["state"]],
         one=True,
     )
     if row is None:
         abort(400, "OAuth request not found")
 
-    dpop_key = JsonWebKey.import_key(json.loads(row["dpop_private_jwk"]))
-    dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
-
     # delete row to prevent replay
-    # XXX:
-    # query_db("DELETE * FROM oauth_request WHERE state = ?;", [request.args["state"]])
-
-    # fetch server metadata again
-    authsrv_url = request.args["iss"]
-    authsrv_meta = fetch_authsrv_meta(authsrv_url)
-
-    # construct auth request
-    url_root = request.url_root.replace("http://", "https://")
-    client_id = f"{url_root}oauth/client-metadata.json"
-    redirect_uri = f"{url_root}oauth/authorize"
-    client_assertion = jwt.encode(
-        {"alg": "ES256", "kid": secret_jwk["kid"]},
-        {
-            "iss": client_id,
-            "sub": client_id,
-            "aud": authsrv_url,
-            "jti": generate_token(),
-            "iat": int(time.time()),
-        },
-        secret_jwk,
-    ).decode("utf-8")
-
-    params = {
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code",
-        "code": request.args["code"],
-        "code_verifier": row["pkce_verifier"],
-        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        "client_assertion": client_assertion,
-    }
-
-    # create DPoP header JWT
-    token_url = authsrv_meta["token_endpoint"]
-    dpop_proof = jwt.encode(
-        {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
-        {
-            "jti": generate_token(),
-            "htm": "POST",
-            "htu": token_url,
-            "iat": int(time.time()),
-            "exp": int(time.time()) + 30,
-        },
-        dpop_key,
-    ).decode("utf-8")
-
-    print(params)
-    # TODO: check if safe URL
-    dpop_nonce = ""
-    resp = requests.post(token_url, data=params, headers={"DPoP": dpop_proof})
-    if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
-        # print(resp.headers)
-        server_nonce = resp.headers["DPoP-Nonce"]  # Dpop-Nonce
-        # print(server_nonce)
-        dpop_proof = jwt.encode(
-            {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
-            {
-                "jti": generate_token(),
-                "htm": "POST",
-                "htu": token_url,
-                "nonce": server_nonce,
-                "iat": int(time.time()),
-                "exp": int(time.time()) + 30,
-            },
-            dpop_key,
-        ).decode("utf-8")
-        resp = requests.post(token_url, data=params, headers={"DPoP": dpop_proof})
-
-    print(resp.json())
-    resp.raise_for_status()
-
-    token_body = resp.json()
-
-    # validate against request DID
-    assert token_body["sub"] == row["did"]
-
     query_db(
-        "INSERT INTO oauth_session (did, handle, pds_url, iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "DELETE FROM oauth_auth_request WHERE state = ?;", [request.args["state"]]
+    )
+
+    # verify query param "iss" against earlier oauth request "iss"
+    assert row["iss"] == request.args["iss"]
+    assert row["state"] == request.args["state"]
+
+    app_url = request.url_root.replace("http://", "https://")
+    tokens, dpop_nonce = complete_auth_request(row, request.args["code"], app_url, secret_jwk)
+
+    # save session in database
+    query_db(
+        "INSERT OR REPLACE INTO oauth_session (did, handle, pds_url, iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             row["did"],
             row["handle"],
             row["pds_url"],
             row["iss"],
-            token_body["access_token"],
-            token_body["refresh_token"],
+            tokens["access_token"],
+            tokens["refresh_token"],
             dpop_nonce,
             row["dpop_private_jwk"],
         ],
     )
-
+    # save user identifier in (secure) session cookie
     session["user_did"] = row["did"]
 
     return redirect("/bsky/post")
+
+
+@login_required
+@app.route("/oauth/logout")
+def oauth_logout():
+    query_db("DELETE FROM oauth_session WHERE did = ?;", [g.user["did"]])
+    session.clear()
+    return redirect("/")
 
 
 @login_required
@@ -372,54 +272,20 @@ def bsky_post():
     if request.method != "POST":
         return render_template("bsky_post.html")
 
-    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     pds_url = g.user["pds_url"]
-    did = g.user["did"]
     req_url = f"{pds_url}/xrpc/com.atproto.repo.createRecord"
 
-    dpop_key = JsonWebKey.import_key(json.loads(g.user["dpop_private_jwk"]))
-    dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
-    nonce = g.user["dpop_nonce"]
-    access_token = g.user["access_token"]
-
-    for i in range(2):
-        print(f"access nonce: {nonce}")
-        dpop_jwt = jwt.encode(
-            {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
-            {
-                "iss": g.user["iss"],
-                "iat": int(time.time()),
-                "exp": int(time.time()) + 10,
-                "jti": generate_token(),
-                "htm": "POST",
-                "htu": req_url,
-                "nonce": nonce,
-                # this S256 is same as DPoP ath hashing
-                "ath": create_s256_code_challenge(access_token),
-            },
-            dpop_key,
-        ).decode("utf-8")
-
-        resp = requests.post(
-            req_url,
-            headers={"Authorization": f"DPoP {access_token}", "DPoP": dpop_jwt},
-            json={
-                "repo": did,
-                "collection": "app.bsky.feed.post",
-                "record": {
-                    "$type": "app.bsky.feed.post",
-                    "text": request.form["post_text"],
-                    "createdAt": now,
-                },
-            },
-        )
-        if resp.status_code in [400, 401] and resp.json()["error"] == "use_dpop_nonce":
-            # print(resp.headers)
-            nonce = resp.headers["DPoP-Nonce"]  # Dpop-Nonce
-            # TODO: update database
-            continue
-        break
-    print(resp.json())
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    body = {
+        "repo": g.user["did"],
+        "collection": "app.bsky.feed.post",
+        "record": {
+            "$type": "app.bsky.feed.post",
+            "text": request.form["post_text"],
+            "createdAt": now,
+        },
+    }
+    resp = pds_auth_req("POST", req_url, body=body, user=g.user, db=get_db())
     resp.raise_for_status()
 
     flash("Post record created in PDS!")
