@@ -20,5 +20,5 @@ CREATE TABLE IF NOT EXISTS oauth_session (
     refresh_token TEXT,
     dpop_nonce TEXT,
     dpop_private_jwk TEXT,
-    UNIQUE(state)
+    UNIQUE(did)
 );
