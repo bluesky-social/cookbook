@@ -19,9 +19,9 @@
     <ul>
     {% if g.user %}
       <li><a href="{{ url_for('bsky_post') }}">Create Post</a>
-      <li><a href="{{ url_for('oauth_logout') }}">Log Out</a>
+      <li><a href="{{ url_for('oauth_logout') }}">Logout</a>
     {% else %}
-      <li><a href="{{ url_for('oauth_login') }}">Log In</a>
+      <li><a href="{{ url_for('oauth_login') }}">Login</a>
     {% endif %}
       <li><a href="https://github.com/bluesky-social/cookbook">About</a>
     </ul>

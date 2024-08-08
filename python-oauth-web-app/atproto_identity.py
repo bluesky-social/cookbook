@@ -31,7 +31,7 @@ def resolve_handle(handle):
         pass
 
     # then try HTTP well-known
-    # IMPORTANT: 'handle' domain is untrusted user input. SSRF mitigations are neccessary
+    # IMPORTANT: 'handle' domain is untrusted user input. SSRF mitigations are necessary
     try:
         with hardened_http.get_session() as sess:
             resp = sess.get(f"https://{handle}/.well-known/atproto-did")
@@ -55,7 +55,7 @@ def resolve_did(did):
 
     if did.startswith("did:web:"):
         domain = did[8:]
-        # IMPORTANT: domain is untrusted input. SSRF mitigations are neccessary
+        # IMPORTANT: domain is untrusted input. SSRF mitigations are necessary
         # "handle" validation works to check that domain is a simple hostname
         assert valid_handle(domain)
         try:
