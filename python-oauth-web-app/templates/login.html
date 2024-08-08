@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<article>
+  <h3>Login with atproto</h3>
+  <form method="post">
+    <p>Provide your handle to authorize with PDS.</p>
+    <fieldset role="group">
+      <input name="username" id="username" placeholder="handle.example.com" style="font-family: monospace,monospace;" required>
+      <input type="submit" value="Login">
+    </fieldset>
+  </form>
+</article>
+{% endblock %}
