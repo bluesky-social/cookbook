@@ -27,7 +27,7 @@ def resolve_handle(handle):
                 val = val[4:]
                 if valid_did(val):
                     return val
-    except dns.resolver.NXDOMAIN:
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         pass
 
     # then try HTTP well-known

@@ -182,7 +182,7 @@ def oauth_login():
     try:
         authsrv_meta = fetch_authsrv_meta(authsrv_url)
     except Exception as err:
-        print(err)
+        print(f"failed to fetch authsrv_meta: " + str(err))
         flash("Failed to fetch Auth Server (Entryway) OAuth metadata")
         return render_template("login.html"), 400
 

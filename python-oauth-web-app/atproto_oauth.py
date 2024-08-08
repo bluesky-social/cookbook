@@ -44,6 +44,7 @@ def valid_authsrv_meta(obj, url):
 
 # gets Authorization Server (entryway) metadata, as dict
 def fetch_authsrv_meta(url):
+    print("Auth Server Metadata URL: " + url)
     # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(url)
     with hardened_http.get_session() as sess:
@@ -51,7 +52,7 @@ def fetch_authsrv_meta(url):
     resp.raise_for_status()
 
     authsrv_meta = resp.json()
-    # print("Auth Server Metadata: " + json.dumps(authsrv_meta, indent=2))
+    #print("Auth Server Metadata: " + json.dumps(authsrv_meta, indent=2))
     assert valid_authsrv_meta(authsrv_meta, url)
     return authsrv_meta
 
