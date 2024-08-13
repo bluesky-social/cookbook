@@ -76,6 +76,7 @@ init_db()
 
 
 # Load back-end account auth metadata when there is a valid front-end session cookie
+# NOTE: Flask uses encrypted cookies for sessions. If the SECRET_KEY config variable isn't provided, Flask will error out when trying to use the session.
 @app.before_request
 def load_logged_in_user():
     user_did = session.get("user_did")
