@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS oauth_auth_request (
     state TEXT,
     iss TEXT,
     did TEXT,
-    handle TEXT,
+    username TEXT,
     pds_url TEXT,
     nonce TEXT,
     pkce_verifier TEXT,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS oauth_auth_request (
 
 CREATE TABLE IF NOT EXISTS oauth_session (
     did TEXT,
-    handle TEXT,
+    username TEXT,
     pds_url TEXT,
     iss TEXT,
     access_token TEXT,

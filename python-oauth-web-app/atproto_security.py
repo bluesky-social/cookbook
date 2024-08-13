@@ -23,7 +23,7 @@ def is_safe_url(url):
     ):
         return False
 
-    if segments[0].isdigit():
+    if segments[-1].isdigit():
         return False
 
     return True

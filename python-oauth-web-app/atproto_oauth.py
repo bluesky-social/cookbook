@@ -9,7 +9,8 @@ from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from atproto_security import is_safe_url, hardened_http
 
 
-def valid_authsrv_meta(obj, url):
+# Checks an Authorization Server metadata response against atproto OAuth requirements
+def is_valid_authsrv_meta(obj, url):
     fetch_url = urlparse(url)
     issuer_url = urlparse(obj["issuer"])
     assert issuer_url.hostname == fetch_url.hostname
@@ -26,9 +27,11 @@ def valid_authsrv_meta(obj, url):
     assert "none" in obj["token_endpoint_auth_methods_supported"]
     assert "private_key_jwt" in obj["token_endpoint_auth_methods_supported"]
     assert "ES256" in obj["token_endpoint_auth_signing_alg_values_supported"]
+    # TODO: shoudl we be enforcing this?
     # assert "refresh_token" in obj["scopes_supported"]
     assert "profile" in obj["scopes_supported"]
-    assert "email" in obj["scopes_supported"]  # TODO
+    # NOTE: we don't really use email, it is just required for OIDC (?)
+    assert "email" in obj["scopes_supported"]
     if "subject_types_supported" in obj:
         assert "public" in obj["subject_types_supported"]
     assert True == obj["authorization_response_iss_parameter_supported"]
@@ -42,7 +45,7 @@ def valid_authsrv_meta(obj, url):
     return True
 
 
-# gets Authorization Server (entryway) metadata, as dict
+# Does an HTTP GET for Authorization Server (entryway) metadata, returning it as a dict
 def fetch_authsrv_meta(url):
     print("Auth Server Metadata URL: " + url)
     # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
@@ -52,28 +55,29 @@ def fetch_authsrv_meta(url):
     resp.raise_for_status()
 
     authsrv_meta = resp.json()
-    #print("Auth Server Metadata: " + json.dumps(authsrv_meta, indent=2))
-    assert valid_authsrv_meta(authsrv_meta, url)
+    # print("Auth Server Metadata: " + json.dumps(authsrv_meta, indent=2))
+    assert is_valid_authsrv_meta(authsrv_meta, url)
     return authsrv_meta
 
 
-# prepares and sends a pushed auth request (PAR) via HTTP POST to the Authorization Server.
-# returns "state" id, nonce, and HTTP response on success, without checking HTTP response status
-def send_par_auth_request(authsrv_url, authsrv_meta, account_did, app_url, secret_jwk):
+# Prepares and sends a pushed auth request (PAR) via HTTP POST to the Authorization Server.
+# Returns "state" id, nonce, and HTTP response on success, without checking HTTP response status
+def send_par_auth_request(authsrv_url, authsrv_meta, username, app_url, secret_jwk):
     par_url = authsrv_meta["pushed_authorization_request_endpoint"]
     issuer = authsrv_meta["issuer"]
     state = generate_token()
     nonce = generate_token()
     pkce_verifier = generate_token(48)
-    redirect_uri = f"{app_url}oauth/authorize"
+    redirect_uri = f"{app_url}oauth/callback"
     client_id = f"{app_url}oauth/client-metadata.json"
+    # TODO: are these the best scopes to request for this demo?
     scope = "openid profile offline_access"
 
-    # generate PKCE code_challenge, and use it for PAR request
+    # Generate PKCE code_challenge, and use it for PAR request
     code_challenge = create_s256_code_challenge(pkce_verifier)
     code_challenge_method = "S256"
 
-    # self-signed JWT using the private key declared in client metadata JWKS
+    # Self-signed JWT using the private key declared in client metadata JWKS
     client_assertion = jwt.encode(
         {"alg": "ES256", "kid": secret_jwk["kid"]},
         {
@@ -95,11 +99,13 @@ def send_par_auth_request(authsrv_url, authsrv_meta, account_did, app_url, secre
         "nonce": nonce,
         "redirect_uri": redirect_uri,
         "scope": scope,
-        "login_hint": account_did,
+        "login_hint": username,
         "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_assertion": client_assertion,
     }
     # print(par_body)
+
+    # TODO: could be doing DPoP here
     # IMPORTANT: Pushed Authorization Request URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(par_url)
     with hardened_http.get_session() as sess:
@@ -108,7 +114,6 @@ def send_par_auth_request(authsrv_url, authsrv_meta, account_did, app_url, secre
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=par_body,
         )
-    # print(resp.json())
     return pkce_verifier, state, nonce, resp
 
 
@@ -117,15 +122,14 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
     state = auth_request["state"]
     authsrv_url = auth_request["iss"]
 
-    dpop_key = JsonWebKey.import_key(json.loads(auth_request["dpop_private_jwk"]))
-    dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
-
-    # fetch server metadata again
+    # Re-fetch server metadata
     authsrv_meta = fetch_authsrv_meta(authsrv_url)
 
-    # construct auth request
+    # Construct auth token request fields
     client_id = f"{app_url}oauth/client-metadata.json"
-    redirect_uri = f"{app_url}oauth/authorize"
+    redirect_uri = f"{app_url}oauth/callback"
+
+    # This is where the "confidential client" secret key is used
     client_assertion = jwt.encode(
         {"alg": "ES256", "kid": secret_jwk["kid"]},
         {
@@ -148,8 +152,10 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
         "client_assertion": client_assertion,
     }
 
-    # create DPoP header JWT
+    # Create DPoP header JWT, using the existing DPoP signing key for this account/session
     token_url = authsrv_meta["token_endpoint"]
+    dpop_key = JsonWebKey.import_key(json.loads(auth_request["dpop_private_jwk"]))
+    dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
     dpop_proof = jwt.encode(
         {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
         {
@@ -162,15 +168,16 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
         dpop_key,
     ).decode("utf-8")
 
-    # print(params)
+    # TODO: should we be reusing earlier DPoP nonce?
     dpop_nonce = ""
     # IMPORTANT: Token URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(token_url)
     with hardened_http.get_session() as sess:
         resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
+
+    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
     if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
-        # print(resp.headers)
-        server_nonce = resp.headers["DPoP-Nonce"]  # Dpop-Nonce
+        server_nonce = resp.headers["DPoP-Nonce"]
         # print(server_nonce)
         dpop_proof = jwt.encode(
             {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
@@ -184,21 +191,20 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
             },
             dpop_key,
         ).decode("utf-8")
-        # IMPORTANT: Token URL is untrusted input, SSRF mitigations are needed
-        assert is_safe_url(token_url)
         with hardened_http.get_session() as sess:
             resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
 
-    # print(resp.json())
     resp.raise_for_status()
     token_body = resp.json()
 
-    # validate against request DID
+    # Validate against request DID (even if original "username" was a handle)
     assert token_body["sub"] == auth_request["did"]
 
     return token_body, dpop_nonce
 
 
+# Helper to demonstrate making a request (HTTP GET or POST) to the user's PDS ("Resource Server" in OAuth terminology) using DPoP and access token.
+# This method returns a 'requests' reponse, without checking status code.
 def pds_auth_req(method, url, user, db, body=None):
 
     dpop_key = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
@@ -206,6 +212,7 @@ def pds_auth_req(method, url, user, db, body=None):
     dpop_nonce = user["dpop_nonce"]
     access_token = user["access_token"]
 
+    # Might need to retry request with a new nonce.
     for i in range(2):
         # print(f"access with nonce: {dpop_nonce}")
         dpop_jwt = jwt.encode(
@@ -230,6 +237,8 @@ def pds_auth_req(method, url, user, db, body=None):
                 headers={"Authorization": f"DPoP {access_token}", "DPoP": dpop_jwt},
                 json=body,
             )
+
+        # If we got a new server-provided DPoP nonce, store it in database and retry.
         if resp.status_code in [400, 401] and resp.json()["error"] == "use_dpop_nonce":
             # print(resp.headers)
             dpop_nonce = resp.headers["DPoP-Nonce"]
@@ -243,5 +252,5 @@ def pds_auth_req(method, url, user, db, body=None):
             cur.close()
             continue
         break
-    # print(resp.json())
+
     return resp

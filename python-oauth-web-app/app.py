@@ -25,13 +25,18 @@ from atproto_oauth import *
 from atproto_security import is_safe_url, hardened_http
 
 app = Flask(__name__)
+
+# Load this configuration from environment variables (which might mean a .env "dotenv" file)
 app.config.from_prefixed_env()
 
+# This is a "confidential" OAuth client, meaning it has access to a persistent secret signing key. parse that key as a global.
 secret_jwk = JsonWebKey.import_key(app.config["SECRET_JWK"])
 pub_jwk = json.loads(secret_jwk.as_json(is_private=False))
+# Defensively check that the public JWK is really public and didn't somehow end up with secret cryptographic key info
 assert "d" not in pub_jwk
 
 
+# Helpers for managing database connection
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
@@ -39,6 +44,13 @@ def get_db():
         db = g._database = sqlite3.connect(db_path)
         db.row_factory = sqlite3.Row
     return db
+
+
+@app.teardown_appcontext
+def close_connection(exception):
+    db = getattr(g, "_database", None)
+    if db is not None:
+        db.close()
 
 
 def query_db(query, args=(), one=False):
@@ -63,13 +75,7 @@ def init_db():
 init_db()
 
 
-@app.teardown_appcontext
-def close_connection(exception):
-    db = getattr(g, "_database", None)
-    if db is not None:
-        db.close()
-
-
+# Load back-end account auth metadata when there is a valid front-end session cookie
 @app.before_request
 def load_logged_in_user():
     user_did = session.get("user_did")
@@ -95,21 +101,14 @@ def login_required(view):
     return wrapped_view
 
 
-@app.errorhandler(500)
-def internal_server_error(e):
-    return render_template("error.html", status_code=500, err=e), 500
-
-
-@app.errorhandler(400)
-def bad_request_error(e):
-    return render_template("error.html", status_code=400, err=e), 400
-
-
+# Actual web routes start here!
 @app.route("/")
 def homepage():
     return render_template("home.html")
 
 
+# Every atproto OAuth client must have a public client metadata JSON document. It doesn't need to be at this specific path. The full URL to this file is the "client_id" of the app.
+# This implementation dynamically uses the HTTP request Host name to infer the "client_id".
 @app.route("/oauth/client-metadata.json")
 def oauth_client_metadata():
     app_url = request.url_root.replace("http://", "https://")
@@ -121,7 +120,7 @@ def oauth_client_metadata():
             "client_id": client_id,
             "dpop_bound_access_tokens": True,
             "application_type": "web",
-            "redirect_uris": [f"{app_url}oauth/authorize"],
+            "redirect_uris": [f"{app_url}oauth/callback"],
             "client_uri": app_url,
             "subject_type": "public",
             "grant_types": ["authorization_code", "refresh_token"],
@@ -129,12 +128,14 @@ def oauth_client_metadata():
             "scope": "openid profile offline_access",
             "client_name": "atproto OAuth Flask Backend Demo",
             "token_endpoint_auth_method": "none",
-            "jwks_uri": f"{app_url}oauth/jwks.json",
+            # NOTE: in theory we can return the public key (in JWK format) inline
             # "jwks": { #    "keys": [pub_jwk], #},
+            "jwks_uri": f"{app_url}oauth/jwks.json",
         }
     )
 
 
+# In this example of a "confidential" OAuth client, we have only a single app key being used. In a production-grade client, it best practice to periodically rotate keys. Including both a "new key" and "old key" at the same time can make this process smoother.
 @app.route("/oauth/jwks.json")
 def oauth_jwks():
     return jsonify(
@@ -144,66 +145,82 @@ def oauth_jwks():
     )
 
 
+# Displays the login form (GET), or starts the OAuth authorization flow (POST).
 @app.route("/oauth/login", methods=("GET", "POST"))
 def oauth_login():
     if request.method != "POST":
         return render_template("login.html")
 
-    # resolve handle and DID document, using atproto identity helpers
+    # Resolve handle and/or DID document, using atproto identity helpers.
+    # The supplied username could be either a handle or a DID (this example
+    # does not support supplying a PDS endpoint). We are calling whatever the
+    # user supplied the "username".
+    # A production-grade client might want to resolve the handle here even if a
+    # DID was supplied for login.
     username = request.form["username"]
-    if not valid_handle(username):
-        flash("Invalid Handle")
-        return render_template("login.html"), 400
-    did = resolve_handle(username)
-    if not did:
-        flash("Handle Not Found")
-        return render_template("login.html"), 400
+    if not username.startswith("did:"):
+        if not valid_handle(username):
+            flash("Invalid Handle")
+            return render_template("login.html"), 400
+        did = resolve_handle(username)
+        if not did:
+            flash("Handle Not Found")
+            return render_template("login.html"), 400
+    else:
+        did = username
     if not valid_did(did):
-        flash("Handle resolved to invalid DID")
+        flash("Invalid DID: " + did)
         return render_template("login.html"), 400
     did_doc = resolve_did(did)
     if not did_doc:
         flash("DID Not Found: " + did)
         return render_template("login.html"), 400
 
-    # fetch PDS OAuth metadata
+    # Fetch PDS OAuth metadata.
     # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
     pds_url = pds_endpoint(did_doc)
-    print(f"PDS: {pds_url}")
+    print(f"account PDS: {pds_url}")
     assert is_safe_url(pds_url)
     with hardened_http.get_session() as sess:
         resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
     resp.raise_for_status()
+    # Additionally check that status is exactly 200 (not just 2xx)
+    assert resp.status_code == 200
 
+    # Fetch Auth Server metadata. For a self-hosted PDS, this will be the same server (the PDS). For large-scale PDS hosts like Bluesky, this may be a separate "entryway" server filling the Auth Server role.
     # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
     authsrv_url = resp.json()["authorization_servers"][0]
-    print(f"Auth Server: {authsrv_url}")
+    print(f"account Auth Server: {authsrv_url}")
     assert is_safe_url(authsrv_url)
     try:
         authsrv_meta = fetch_authsrv_meta(authsrv_url)
     except Exception as err:
-        print(f"failed to fetch authsrv_meta: " + str(err))
+        print(f"failed to fetch auth server metadata: " + str(err))
         flash("Failed to fetch Auth Server (Entryway) OAuth metadata")
         return render_template("login.html"), 400
 
+    # Dynamically compute our "client_id" based on the request HTTP Host
     app_url = request.url_root.replace("http://", "https://")
     client_id = f"{app_url}oauth/client-metadata.json"
 
-    pkce_verifier, state, nonce, resp = send_par_auth_request(
-        authsrv_url, authsrv_meta, did, app_url, secret_jwk
-    )
-    resp.raise_for_status()
-    request_uri = resp.json()["request_uri"]
-
-    # create a DPoP keypair for this user session now (TODO: why now?)
+    # Generate DPoP private signing key for this account session. In theory this could be defered until the token request at the end of the athentication flow, but doing it now allows early binding during the PAR request.
+    # TODO: nonce?
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True).as_json(
         is_private=True
     )
 
-    # persist auth request to database
+    # Submit OAuth Pushed Authentication Request (PAR). We could have constructed a more complex authentication request URL below instead, but there are some advantages with PAR, including failing fast, early DPoP binding, and no URL length limitations.
+    # TODO: use dpop_private_jwk here, along with a nonce?
+    pkce_verifier, state, nonce, resp = send_par_auth_request(
+        authsrv_url, authsrv_meta, did, app_url, secret_jwk
+    )
+    resp.raise_for_status()
+    # This field is confusingly named: it is basically a token to refering back to the successful PAR request.
+    par_request_uri = resp.json()["request_uri"]
+
     print(f"saving oauth_auth_request to DB: {state}")
     query_db(
-        "INSERT INTO oauth_auth_request (state, iss, nonce, pkce_verifier, dpop_private_jwk, did, handle, pds_url) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT INTO oauth_auth_request (state, iss, nonce, pkce_verifier, dpop_private_jwk, did, username, pds_url) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             state,
             authsrv_meta["issuer"],
@@ -216,42 +233,48 @@ def oauth_login():
         ],
     )
 
+    # Forward the user to the Authorization Server to complete the browser auth flow.
     # IMPORTANT: Authorization endpoint URL is untrusted input, security mitigations are needed before redirecting user
     auth_url = authsrv_meta["authorization_endpoint"]
     assert is_safe_url(auth_url)
-    qparam = urlencode({"client_id": client_id, "request_uri": request_uri})
+    qparam = urlencode({"client_id": client_id, "request_uri": par_request_uri})
     return redirect(f"{auth_url}?{qparam}")
 
 
-@app.route("/oauth/authorize")
-def oauth_authorize():
-    # print(request.args)
+# Endpoint for receiving "callback" responses from the Authorization Server, to complete the auth flow.
+@app.route("/oauth/callback")
+def oauth_callback():
+    state = request.args["state"]
+    iss = request.args["iss"]
+    code = request.args["code"]
+
+    # Lookup auth request by the "state" token (which we randomly generated earlier)
     row = query_db(
         "SELECT * FROM oauth_auth_request WHERE state = ?;",
-        [request.args["state"]],
+        [state],
         one=True,
     )
     if row is None:
         abort(400, "OAuth request not found")
 
-    # delete row to prevent replay
-    query_db("DELETE FROM oauth_auth_request WHERE state = ?;", [request.args["state"]])
+    # Delete row to prevent response replay
+    query_db("DELETE FROM oauth_auth_request WHERE state = ?;", [state])
 
-    # verify query param "iss" against earlier oauth request "iss"
-    assert row["iss"] == request.args["iss"]
-    assert row["state"] == request.args["state"]
+    # Verify query param "iss" against earlier oauth request "iss"
+    assert row["iss"] == iss
+    # This is redundant with the above SQL query, but also double-checking that the "state" param matches the original request
+    assert row["state"] == state
 
+    # Complete the auth flow by requesting auth tokens from the authorization server.
     app_url = request.url_root.replace("http://", "https://")
-    tokens, dpop_nonce = complete_auth_request(
-        row, request.args["code"], app_url, secret_jwk
-    )
+    tokens, dpop_nonce = complete_auth_request(row, code, app_url, secret_jwk)
 
-    # save session in database
+    # Save session (including auth tokens) in database
     query_db(
-        "INSERT OR REPLACE INTO oauth_session (did, handle, pds_url, iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT OR REPLACE INTO oauth_session (did, username, pds_url, iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             row["did"],
-            row["handle"],
+            row["username"],
             row["pds_url"],
             row["iss"],
             tokens["access_token"],
@@ -260,7 +283,8 @@ def oauth_authorize():
             row["dpop_private_jwk"],
         ],
     )
-    # save user identifier in (secure) session cookie
+
+    # Set a (secure) session cookie in the user's browser, for authentication between the browser and this app
     session["user_did"] = row["did"]
 
     return redirect("/bsky/post")
@@ -274,6 +298,7 @@ def oauth_logout():
     return redirect("/")
 
 
+# Example form endpoint demonstrating making an authenticated request to the logged-in user's PDS to create a repository record.
 @login_required
 @app.route("/bsky/post", methods=("GET", "POST"))
 def bsky_post():
@@ -298,3 +323,13 @@ def bsky_post():
 
     flash("Post record created in PDS!")
     return render_template("bsky_post.html")
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    return render_template("error.html", status_code=500, err=e), 500
+
+
+@app.errorhandler(400)
+def bad_request_error(e):
+    return render_template("error.html", status_code=400, err=e), 400
