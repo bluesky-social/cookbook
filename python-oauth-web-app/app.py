@@ -30,10 +30,10 @@ app = Flask(__name__)
 app.config.from_prefixed_env()
 
 # This is a "confidential" OAuth client, meaning it has access to a persistent secret signing key. parse that key as a global.
-secret_jwk = JsonWebKey.import_key(app.config["SECRET_JWK"])
-pub_jwk = json.loads(secret_jwk.as_json(is_private=False))
+CLIENT_SECRET_JWK = JsonWebKey.import_key(app.config["CLIENT_SECRET_JWK"])
+CLIENT_PUB_JWK = json.loads(CLIENT_SECRET_JWK.as_json(is_private=False))
 # Defensively check that the public JWK is really public and didn't somehow end up with secret cryptographic key info
-assert "d" not in pub_jwk
+assert "d" not in CLIENT_PUB_JWK
 
 
 # Helpers for managing database connection
@@ -108,7 +108,7 @@ def homepage():
     return render_template("home.html")
 
 
-# Every atproto OAuth client must have a public client metadata JSON document. It doesn't need to be at this specific path. The full URL to this file is the "client_id" of the app.
+# Every atproto OAuth client must have a public client metadata JSON document. It does not need to be at this specific path. The full URL to this file is the "client_id" of the app.
 # This implementation dynamically uses the HTTP request Host name to infer the "client_id".
 @app.route("/oauth/client-metadata.json")
 def oauth_client_metadata():
@@ -122,16 +122,19 @@ def oauth_client_metadata():
             "dpop_bound_access_tokens": True,
             "application_type": "web",
             "redirect_uris": [f"{app_url}oauth/callback"],
-            "client_uri": app_url,
             "subject_type": "public",
             "grant_types": ["authorization_code", "refresh_token"],
-            "response_types": ["code"],  # TODO: "code id_token"?
-            "scope": "openid profile offline_access",
-            "client_name": "atproto OAuth Flask Backend Demo",
-            "token_endpoint_auth_method": "none",
+            "response_types": ["code"],
+            # TODO: offline access here is deprecated
+            "scope": "atproto transition:generic offline_access",
+            "token_endpoint_auth_method": "private_key_jwt",
+            "token_endpoint_auth_signing_alg": "ES256",
             # NOTE: in theory we can return the public key (in JWK format) inline
-            # "jwks": { #    "keys": [pub_jwk], #},
+            # "jwks": { #    "keys": [CLIENT_PUB_JWK], #},
             "jwks_uri": f"{app_url}oauth/jwks.json",
+            # the following are optional fields, which might not be displayed by auth server
+            "client_name": "atproto OAuth Flask Backend Demo",
+            "client_uri": app_url,
         }
     )
 
@@ -141,7 +144,7 @@ def oauth_client_metadata():
 def oauth_jwks():
     return jsonify(
         {
-            "keys": [pub_jwk],
+            "keys": [CLIENT_PUB_JWK],
         }
     )
 
@@ -190,19 +193,16 @@ def oauth_login():
 
     # Fetch Auth Server metadata. For a self-hosted PDS, this will be the same server (the PDS). For large-scale PDS hosts like Bluesky, this may be a separate "entryway" server filling the Auth Server role.
     # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
-    authsrv_url = resp.json()["authorization_servers"][0]
-    print(f"account Auth Server: {authsrv_url}")
-    assert is_safe_url(authsrv_url)
+    authserver_url = resp.json()["authorization_servers"][0]
+    print(f"account Auth Server: {authserver_url}")
+    assert is_safe_url(authserver_url)
     try:
-        authsrv_meta = fetch_authsrv_meta(authsrv_url)
+        authserver_meta = fetch_authserver_meta(authserver_url)
     except Exception as err:
-        print(f"failed to fetch auth server metadata: " + str(err))
+        print(f"failed to fetch auth server metadata: {err}")
+        # raise err
         flash("Failed to fetch Auth Server (Entryway) OAuth metadata")
         return render_template("login.html"), 400
-
-    # Dynamically compute our "client_id" based on the request HTTP Host
-    app_url = request.url_root.replace("http://", "https://")
-    client_id = f"{app_url}oauth/client-metadata.json"
 
     # Generate DPoP private signing key for this account session. In theory this could be defered until the token request at the end of the athentication flow, but doing it now allows early binding during the PAR request.
     # TODO: nonce?
@@ -210,33 +210,51 @@ def oauth_login():
         is_private=True
     )
 
+    # OAuth scopes requested by this app
+    # TODO: not supported yet
+    # scope = "atproto transition:generic"
+    scope = "offline_access"
+
+    # Dynamically compute our "client_id" based on the request HTTP Host
+    app_url = request.url_root.replace("http://", "https://")
+    redirect_uri = f"{app_url}oauth/callback"
+    client_id = f"{app_url}oauth/client-metadata.json"
+
     # Submit OAuth Pushed Authentication Request (PAR). We could have constructed a more complex authentication request URL below instead, but there are some advantages with PAR, including failing fast, early DPoP binding, and no URL length limitations.
     # TODO: use dpop_private_jwk here, along with a nonce?
-    pkce_verifier, state, nonce, resp = send_par_auth_request(
-        authsrv_url, authsrv_meta, did, app_url, secret_jwk
+    pkce_verifier, state, dpop_nonce, resp = send_par_auth_request(
+        authserver_url,
+        authserver_meta,
+        username,
+        client_id,
+        redirect_uri,
+        scope,
+        CLIENT_SECRET_JWK,
     )
+    if resp.status_code == 400:
+        print(f"PAR HTTP 400: {resp.json()}")
     resp.raise_for_status()
     # This field is confusingly named: it is basically a token to refering back to the successful PAR request.
     par_request_uri = resp.json()["request_uri"]
 
     print(f"saving oauth_auth_request to DB: {state}")
     query_db(
-        "INSERT INTO oauth_auth_request (state, iss, nonce, pkce_verifier, dpop_private_jwk, did, username, pds_url) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT INTO oauth_auth_request (state, authserver_iss, login_hint, did, pds_url, pkce_verifier, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             state,
-            authsrv_meta["issuer"],
-            nonce,
-            pkce_verifier,
-            dpop_private_jwk,
-            did,
+            authserver_meta["issuer"],
             username,
+            did,
             pds_url,
+            pkce_verifier,
+            dpop_nonce,
+            dpop_private_jwk,
         ],
     )
 
     # Forward the user to the Authorization Server to complete the browser auth flow.
     # IMPORTANT: Authorization endpoint URL is untrusted input, security mitigations are needed before redirecting user
-    auth_url = authsrv_meta["authorization_endpoint"]
+    auth_url = authserver_meta["authorization_endpoint"]
     assert is_safe_url(auth_url)
     qparam = urlencode({"client_id": client_id, "request_uri": par_request_uri})
     return redirect(f"{auth_url}?{qparam}")
@@ -246,8 +264,8 @@ def oauth_login():
 @app.route("/oauth/callback")
 def oauth_callback():
     state = request.args["state"]
-    iss = request.args["iss"]
-    code = request.args["code"]
+    authserver_iss = request.args["iss"]
+    authorization_code = request.args["code"]
 
     # Lookup auth request by the "state" token (which we randomly generated earlier)
     row = query_db(
@@ -262,22 +280,23 @@ def oauth_callback():
     query_db("DELETE FROM oauth_auth_request WHERE state = ?;", [state])
 
     # Verify query param "iss" against earlier oauth request "iss"
-    assert row["iss"] == iss
+    assert row["authserver_iss"] == authserver_iss
     # This is redundant with the above SQL query, but also double-checking that the "state" param matches the original request
     assert row["state"] == state
 
     # Complete the auth flow by requesting auth tokens from the authorization server.
     app_url = request.url_root.replace("http://", "https://")
-    tokens, dpop_nonce = complete_auth_request(row, code, app_url, secret_jwk)
+    tokens, dpop_nonce = initial_token_request(
+        row, authorization_code, app_url, CLIENT_SECRET_JWK
+    )
 
     # Save session (including auth tokens) in database
     query_db(
-        "INSERT OR REPLACE INTO oauth_session (did, username, pds_url, iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT OR REPLACE INTO oauth_session (did, pds_url, authserver_iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?);",
         [
             row["did"],
-            row["username"],
             row["pds_url"],
-            row["iss"],
+            row["authserver_iss"],
             tokens["access_token"],
             tokens["refresh_token"],
             dpop_nonce,
@@ -319,7 +338,7 @@ def bsky_post():
             "createdAt": now,
         },
     }
-    resp = pds_auth_req("POST", req_url, body=body, user=g.user, db=get_db())
+    resp = pds_authed_req("POST", req_url, body=body, user=g.user, db=get_db())
     resp.raise_for_status()
 
     flash("Post record created in PDS!")

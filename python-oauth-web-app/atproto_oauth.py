@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from typing import Any
 import time
 import json
 from authlib.jose import JsonWebKey
@@ -10,7 +11,7 @@ from atproto_security import is_safe_url, hardened_http
 
 
 # Checks an Authorization Server metadata response against atproto OAuth requirements
-def is_valid_authsrv_meta(obj, url):
+def is_valid_authserver_meta(obj: dict, url: str) -> bool:
     fetch_url = urlparse(url)
     issuer_url = urlparse(obj["issuer"])
     assert issuer_url.hostname == fetch_url.hostname
@@ -27,14 +28,10 @@ def is_valid_authsrv_meta(obj, url):
     assert "none" in obj["token_endpoint_auth_methods_supported"]
     assert "private_key_jwt" in obj["token_endpoint_auth_methods_supported"]
     assert "ES256" in obj["token_endpoint_auth_signing_alg_values_supported"]
-    # TODO: shoudl we be enforcing this?
-    # assert "refresh_token" in obj["scopes_supported"]
-    assert "profile" in obj["scopes_supported"]
-    # NOTE: we don't really use email, it is just required for OIDC (?)
-    assert "email" in obj["scopes_supported"]
-    if "subject_types_supported" in obj:
-        assert "public" in obj["subject_types_supported"]
-    assert True == obj["authorization_response_iss_parameter_supported"]
+    # TODO: not yet supported by prod servers
+    # assert "atproto" in obj["scopes_supported"]
+    # TODO: not mentioned in spec but should be?
+    # assert True == obj["authorization_response_iss_parameter_supported"]
     assert obj["pushed_authorization_request_endpoint"] is not None
     assert True == obj["require_pushed_authorization_requests"]
     assert "ES256" in obj["dpop_signing_alg_values_supported"]
@@ -45,8 +42,8 @@ def is_valid_authsrv_meta(obj, url):
     return True
 
 
-# Does an HTTP GET for Authorization Server (entryway) metadata, returning it as a dict
-def fetch_authsrv_meta(url):
+# Does an HTTP GET for Authorization Server (entryway) metadata, verify the contents, and return the metadata as a dict
+def fetch_authserver_meta(url: str) -> dict:
     print("Auth Server Metadata URL: " + url)
     # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(url)
@@ -54,24 +51,27 @@ def fetch_authsrv_meta(url):
         resp = sess.get(f"{url}/.well-known/oauth-authorization-server")
     resp.raise_for_status()
 
-    authsrv_meta = resp.json()
-    # print("Auth Server Metadata: " + json.dumps(authsrv_meta, indent=2))
-    assert is_valid_authsrv_meta(authsrv_meta, url)
-    return authsrv_meta
+    authserver_meta = resp.json()
+    # print("Auth Server Metadata: " + json.dumps(authserver_meta, indent=2))
+    assert is_valid_authserver_meta(authserver_meta, url)
+    return authserver_meta
 
 
 # Prepares and sends a pushed auth request (PAR) via HTTP POST to the Authorization Server.
-# Returns "state" id, nonce, and HTTP response on success, without checking HTTP response status
-def send_par_auth_request(authsrv_url, authsrv_meta, username, app_url, secret_jwk):
-    par_url = authsrv_meta["pushed_authorization_request_endpoint"]
-    issuer = authsrv_meta["issuer"]
+# Returns "state" id HTTP response on success, without checking HTTP response status
+def send_par_auth_request(
+    authserver_url: str,
+    authserver_meta: dict,
+    username: str,
+    client_id: str,
+    redirect_uri: str,
+    scope: str,
+    client_secret_jwk: JsonWebKey,
+) -> (str, Any):
+    par_url = authserver_meta["pushed_authorization_request_endpoint"]
+    issuer = authserver_meta["issuer"]
     state = generate_token()
-    nonce = generate_token()
     pkce_verifier = generate_token(48)
-    redirect_uri = f"{app_url}oauth/callback"
-    client_id = f"{app_url}oauth/client-metadata.json"
-    # TODO: are these the best scopes to request for this demo?
-    scope = "openid profile offline_access"
 
     # Generate PKCE code_challenge, and use it for PAR request
     code_challenge = create_s256_code_challenge(pkce_verifier)
@@ -79,15 +79,15 @@ def send_par_auth_request(authsrv_url, authsrv_meta, username, app_url, secret_j
 
     # Self-signed JWT using the private key declared in client metadata JWKS
     client_assertion = jwt.encode(
-        {"alg": "ES256", "kid": secret_jwk["kid"]},
+        {"alg": "ES256", "kid": client_secret_jwk["kid"]},
         {
             "iss": client_id,
             "sub": client_id,
-            "aud": authsrv_url,
+            "aud": authserver_url,
             "jti": generate_token(),
             "iat": int(time.time()),
         },
-        secret_jwk,
+        client_secret_jwk,
     ).decode("utf-8")
 
     par_body = {
@@ -96,7 +96,6 @@ def send_par_auth_request(authsrv_url, authsrv_meta, username, app_url, secret_j
         "code_challenge_method": code_challenge_method,
         "client_id": client_id,
         "state": state,
-        "nonce": nonce,
         "redirect_uri": redirect_uri,
         "scope": scope,
         "login_hint": username,
@@ -105,7 +104,9 @@ def send_par_auth_request(authsrv_url, authsrv_meta, username, app_url, secret_j
     }
     # print(par_body)
 
-    # TODO: could be doing DPoP here
+    # TODO: start DPoP here
+    dpop_nonce = ""
+
     # IMPORTANT: Pushed Authorization Request URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(par_url)
     with hardened_http.get_session() as sess:
@@ -114,16 +115,20 @@ def send_par_auth_request(authsrv_url, authsrv_meta, username, app_url, secret_j
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             data=par_body,
         )
-    return pkce_verifier, state, nonce, resp
+    return pkce_verifier, state, dpop_nonce, resp
 
 
-def complete_auth_request(auth_request, code, app_url, secret_jwk):
+# Completes the auth flow by sending an initial auth token request.
+# Returns token response (dict) and DPoP nonce (str)
+def initial_token_request(
+    auth_request: dict, code: str, app_url: str, client_secret_jwk: JsonWebKey
+) -> (dict, str):
 
     state = auth_request["state"]
-    authsrv_url = auth_request["iss"]
+    authserver_url = auth_request["authserver_iss"]
 
     # Re-fetch server metadata
-    authsrv_meta = fetch_authsrv_meta(authsrv_url)
+    authserver_meta = fetch_authserver_meta(authserver_url)
 
     # Construct auth token request fields
     client_id = f"{app_url}oauth/client-metadata.json"
@@ -131,15 +136,15 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
 
     # This is where the "confidential client" secret key is used
     client_assertion = jwt.encode(
-        {"alg": "ES256", "kid": secret_jwk["kid"]},
+        {"alg": "ES256", "kid": client_secret_jwk["kid"]},
         {
             "iss": client_id,
             "sub": client_id,
-            "aud": authsrv_url,
+            "aud": authserver_url,
             "jti": generate_token(),
             "iat": int(time.time()),
         },
-        secret_jwk,
+        client_secret_jwk,
     ).decode("utf-8")
 
     params = {
@@ -153,7 +158,7 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
     }
 
     # Create DPoP header JWT, using the existing DPoP signing key for this account/session
-    token_url = authsrv_meta["token_endpoint"]
+    token_url = authserver_meta["token_endpoint"]
     dpop_key = JsonWebKey.import_key(json.loads(auth_request["dpop_private_jwk"]))
     dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
     dpop_proof = jwt.encode(
@@ -203,9 +208,12 @@ def complete_auth_request(auth_request, code, app_url, secret_jwk):
     return token_body, dpop_nonce
 
 
+# TODO: refresh_token_req()
+
+
 # Helper to demonstrate making a request (HTTP GET or POST) to the user's PDS ("Resource Server" in OAuth terminology) using DPoP and access token.
 # This method returns a 'requests' reponse, without checking status code.
-def pds_auth_req(method, url, user, db, body=None):
+def pds_authed_req(method, url, user, db, body=None):
 
     dpop_key = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
     dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))
@@ -218,7 +226,7 @@ def pds_auth_req(method, url, user, db, body=None):
         dpop_jwt = jwt.encode(
             {"typ": "dpop+jwt", "alg": "ES256", "jwk": dpop_pub_jwk},
             {
-                "iss": user["iss"],
+                "iss": user["authserver_iss"],
                 "iat": int(time.time()),
                 "exp": int(time.time()) + 10,
                 "jti": generate_token(),

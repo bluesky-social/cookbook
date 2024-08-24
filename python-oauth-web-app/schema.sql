@@ -1,24 +1,21 @@
 
 CREATE TABLE IF NOT EXISTS oauth_auth_request (
-    state TEXT,
-    iss TEXT,
+    state TEXT NOT NULL PRIMARY KEY,
+    authserver_iss TEXT NOT NULL,
+    login_hint TEXT,
     did TEXT,
-    username TEXT,
     pds_url TEXT,
-    nonce TEXT,
-    pkce_verifier TEXT,
-    dpop_private_jwk TEXT,
-    UNIQUE(state)
+    pkce_verifier TEXT NOT NULL,
+    dpop_nonce TEXT NOT NULL,
+    dpop_private_jwk TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS oauth_session (
-    did TEXT,
-    username TEXT,
-    pds_url TEXT,
-    iss TEXT,
+    did TEXT NOT NULL PRIMARY KEY,
+    pds_url TEXT NOT NULL,
+    authserver_iss TEXT NOT NULL,
     access_token TEXT,
     refresh_token TEXT,
-    dpop_nonce TEXT,
-    dpop_private_jwk TEXT,
-    UNIQUE(did)
+    dpop_nonce TEXT NOT NULL,
+    dpop_private_jwk TEXT NOT NULL
 );

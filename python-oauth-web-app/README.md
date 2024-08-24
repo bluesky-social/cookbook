@@ -19,7 +19,7 @@ Copy `example.env` to `.env` and update it with locally-generated secrets:
 # FLASK_SECRET_KEY (for cookie session security)
 rye run python3 -c 'import secrets; print(secrets.token_hex())'
 
-# FLASK_SECRET_JWK (for OAuth)
+# FLASK_CLIENT_SECRET_JWK (for OAuth confidential client)
 rye run python3 generate_jwk.py
 ```
 
