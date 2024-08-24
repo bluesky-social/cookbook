@@ -155,46 +155,48 @@ def oauth_login():
     if request.method != "POST":
         return render_template("login.html")
 
-    # Resolve handle and/or DID document, using atproto identity helpers.
-    # The supplied username could be either a handle or a DID (this example
-    # does not support supplying a PDS endpoint). We are calling whatever the
-    # user supplied the "username".
-    # A production-grade client might want to resolve the handle here even if a
-    # DID was supplied for login.
+    # Login can start with a handle, DID, or auth server URL. We are calling whatever the user supplied the "username".
     username = request.form["username"]
-    if not username.startswith("did:"):
-        if not valid_handle(username):
-            flash("Invalid Handle")
-            return render_template("login.html"), 400
-        did = resolve_handle(username)
-        if not did:
-            flash("Handle Not Found")
-            return render_template("login.html"), 400
-    else:
-        did = username
-    if not valid_did(did):
-        flash("Invalid DID: " + did)
-        return render_template("login.html"), 400
-    did_doc = resolve_did(did)
-    if not did_doc:
-        flash("DID Not Found: " + did)
-        return render_template("login.html"), 400
+    if is_valid_handle(username) or is_valid_did(username):
+        # If starting with an account identifier, resolve the identity (bi-directionally), fetch the PDS URL, and resolve to the Authorization Server URL
+        login_hint = username
+        did, handle, did_doc = resolve_identity(username)
+        pds_url = pds_endpoint(did_doc)
+        print(f"account PDS: {pds_url}")
 
-    # Fetch PDS OAuth metadata.
-    # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
-    pds_url = pds_endpoint(did_doc)
-    print(f"account PDS: {pds_url}")
-    assert is_safe_url(pds_url)
-    with hardened_http.get_session() as sess:
-        resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
-    resp.raise_for_status()
-    # Additionally check that status is exactly 200 (not just 2xx)
-    assert resp.status_code == 200
+        # Fetch PDS (Resource Server) OAuth metadata.
+        # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
+        assert is_safe_url(pds_url)
+        with hardened_http.get_session() as sess:
+            resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
+        resp.raise_for_status()
+        # Additionally check that status is exactly 200 (not just 2xx)
+        assert resp.status_code == 200
+        authserver_url = resp.json()["authorization_servers"][0]
+
+    elif username.startswith("https://") and is_safe_url(username):
+        # When starting with an auth server, we don't know about the account yet.
+        did, handle, pds_url = None, None, None
+        login_hint = None
+        # Check if this is a Resource Server (PDS) URL; otherwise assume it is authorization server
+        initial_url = username
+        try:
+            # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
+            with hardened_http.get_session() as sess:
+                resp = sess.get(f"{initial_url}/.well-known/oauth-protected-resource")
+            resp.raise_for_status()
+            # Additionally check that status is exactly 200 (not just 2xx)
+            assert resp.status_code == 200
+            authserver_url = resp.json()["authorization_servers"][0]
+        except:
+            authserver_url = initial_url
+    else:
+        flash("Not a valid handle, DID, or auth server URL")
+        return render_template("login.html"), 400
 
     # Fetch Auth Server metadata. For a self-hosted PDS, this will be the same server (the PDS). For large-scale PDS hosts like Bluesky, this may be a separate "entryway" server filling the Auth Server role.
     # IMPORTANT: Authorization Server URL is untrusted input, SSRF mitigations are needed
-    authserver_url = resp.json()["authorization_servers"][0]
-    print(f"account Auth Server: {authserver_url}")
+    print(f"account Authorization Server: {authserver_url}")
     assert is_safe_url(authserver_url)
     try:
         authserver_meta = fetch_authserver_meta(authserver_url)
@@ -225,7 +227,7 @@ def oauth_login():
     pkce_verifier, state, dpop_nonce, resp = send_par_auth_request(
         authserver_url,
         authserver_meta,
-        username,
+        login_hint,
         client_id,
         redirect_uri,
         scope,
@@ -239,13 +241,13 @@ def oauth_login():
 
     print(f"saving oauth_auth_request to DB: {state}")
     query_db(
-        "INSERT INTO oauth_auth_request (state, authserver_iss, login_hint, did, pds_url, pkce_verifier, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT INTO oauth_auth_request (state, authserver_iss, did, handle, pds_url, pkce_verifier, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             state,
             authserver_meta["issuer"],
-            username,
-            did,
-            pds_url,
+            did,  # might be None
+            handle,  # might be None
+            pds_url,  # might be None
             pkce_verifier,
             dpop_nonce,
             dpop_private_jwk,
@@ -290,13 +292,39 @@ def oauth_callback():
         row, authorization_code, app_url, CLIENT_SECRET_JWK
     )
 
+    # Now we verify the account authentication against the original request
+    if row["did"]:
+        # If we started with an account identifier, this is simple
+        did, handle, pds_url = row["did"], row["handle"], row["pds_url"]
+        assert tokens["sub"] == did
+    else:
+        # If we started with an auth server URL, now we need to resolve the identity
+        did = tokens["sub"]
+        assert is_valid_did(did)
+        did, handle, did_doc = resolve_identity(did)
+        pds_url = pds_endpoint(did_doc)
+
+        assert is_safe_url(pds_url)
+        with hardened_http.get_session() as sess:
+            resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
+        resp.raise_for_status()
+        # Additionally check that status is exactly 200 (not just 2xx)
+        assert resp.status_code == 200
+        authserver_url = resp.json()["authorization_servers"][0]
+
+        # Verify that Authorization Server matches
+        assert authserver_url == authserver_iss
+
+    # TODO: verify that returned scope matches request
+
     # Save session (including auth tokens) in database
     query_db(
-        "INSERT OR REPLACE INTO oauth_session (did, pds_url, authserver_iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?);",
+        "INSERT OR REPLACE INTO oauth_session (did, handle, pds_url, authserver_iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
-            row["did"],
-            row["pds_url"],
-            row["authserver_iss"],
+            did,
+            handle,
+            pds_url,
+            authserver_iss,
             tokens["access_token"],
             tokens["refresh_token"],
             dpop_nonce,
@@ -305,7 +333,9 @@ def oauth_callback():
     )
 
     # Set a (secure) session cookie in the user's browser, for authentication between the browser and this app
-    session["user_did"] = row["did"]
+    session["user_did"] = did
+    # Note that the handle might change over time, and should be re-resolved periodically in a real app
+    session["user_handle"] = handle
 
     return redirect("/bsky/post")
 

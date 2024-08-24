@@ -3,6 +3,7 @@ import sys
 import json
 import requests
 import dns.resolver
+from typing import Optional
 
 from atproto_security import is_safe_url, hardened_http
 
@@ -10,22 +11,60 @@ HANDLE_REGEX = r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA
 DID_REGEX = r"^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$"
 
 
-def valid_handle(handle):
+def is_valid_handle(handle: str) -> bool:
     return re.match(HANDLE_REGEX, handle) != None
 
 
-def valid_did(did):
+def is_valid_did(did: str) -> bool:
     return re.match(DID_REGEX, did) != None
 
 
-def resolve_handle(handle):
+def handle_from_doc(doc: dict) -> str:
+    for aka in doc.get("alsoKnownAs", []):
+        if aka.startswith("at://"):
+            handle = aka[5:]
+            if is_valid_handle(handle):
+                return handle
+    return None
+
+
+# resolves an identity (handle or DID) to a DID, handle, and DID document. verifies handle bi-directionally.
+def resolve_identity(atid: str) -> (str, str, dict):
+    if is_valid_handle(atid):
+        handle = atid
+        did = resolve_handle(handle)
+        if not did:
+            raise Exception("Failed to resolve handle: " + handle)
+        doc = resolve_did(did)
+        if not doc:
+            raise Exception("Failed to resolve DID: " + did)
+        doc_handle = handle_from_doc(doc)
+        if not doc_handle or doc_handle != handle:
+            raise Exception("Handle did not match DID: " + handle)
+        return did, handle, doc
+    if is_valid_did(atid):
+        did = atid
+        doc = resolve_did(did)
+        if not doc:
+            raise Exception("Failed to resolve DID: " + did)
+        handle = handle_from_doc(doc)
+        if not handle:
+            raise Exception("Handle did not match DID: " + handle)
+        if resolve_handle(handle) != did:
+            raise Exception("Handle did not match DID: " + handle)
+        return did, handle, doc
+
+    raise Exception("identifier not a handle or DID: " + atid)
+
+
+def resolve_handle(handle: str) -> Optional[str]:
     # first try TXT record
     try:
         for record in dns.resolver.resolve(f"_atproto.{handle}", "TXT"):
             val = record.to_text().replace('"', "")
             if val.startswith("did="):
                 val = val[4:]
-                if valid_did(val):
+                if is_valid_did(val):
                     return val
     except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
         pass
@@ -40,12 +79,12 @@ def resolve_handle(handle):
     if resp.status_code != 200:
         return None
     did = resp.text.split()[0]
-    if valid_did(did):
+    if is_valid_did(did):
         return did
     return None
 
 
-def resolve_did(did):
+def resolve_did(did: str) -> Optional[dict]:
     if did.startswith("did:plc:"):
         # NOTE: 'did' is untrusted input, but has been validated by regex by this point
         resp = requests.get(f"https://plc.directory/{did}")
@@ -66,9 +105,10 @@ def resolve_did(did):
         if resp.status_code != 200:
             return None
         return resp.json()
+    raise ValueError("unsupported DID type")
 
 
-def pds_endpoint(doc):
+def pds_endpoint(doc: dict) -> str:
     for svc in doc["service"]:
         if svc["id"] == "#atproto_pds":
             return svc["serviceEndpoint"]
@@ -76,15 +116,17 @@ def pds_endpoint(doc):
 
 
 if __name__ == "__main__":
-    assert valid_did("did:web:example.com")
-    assert valid_did("did:plc:abc123")
-    assert valid_did("") == False
-    assert valid_did("did:asdfasdf") == False
+    assert is_valid_did("did:web:example.com")
+    assert is_valid_did("did:plc:abc123")
+    assert is_valid_did("") == False
+    assert is_valid_did("did:asdfasdf") == False
     handle = sys.argv[1]
-    if not valid_handle(handle):
+    if not is_valid_handle(handle):
         print("invalid handle!")
         sys.exit(-1)
     did = resolve_handle(handle)
     print(f"DID: {did}")
     doc = resolve_did(did)
     print(doc)
+    resolve_identity(handle)
+    resolve_identity(did)

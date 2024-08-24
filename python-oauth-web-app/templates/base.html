@@ -12,7 +12,7 @@
   <hgroup>
     <h1>atproto OAuth Flask Backend Demo</h1>
     {% if g.user %}
-      <p>Hello <span style="font-family: monospace;">{{ g.user['did'] }}</span>!</p>
+      <p>Hello <span style="font-family: monospace;">@{{ g.user['handle'] }}</span>!</p>
     {% endif %}
   </hgroup>
   <nav>

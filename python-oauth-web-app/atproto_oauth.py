@@ -62,7 +62,7 @@ def fetch_authserver_meta(url: str) -> dict:
 def send_par_auth_request(
     authserver_url: str,
     authserver_meta: dict,
-    username: str,
+    login_hint: str,
     client_id: str,
     redirect_uri: str,
     scope: str,
@@ -98,10 +98,11 @@ def send_par_auth_request(
         "state": state,
         "redirect_uri": redirect_uri,
         "scope": scope,
-        "login_hint": username,
         "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_assertion": client_assertion,
     }
+    if login_hint:
+        par_body["login_hint"] = login_hint
     # print(par_body)
 
     # TODO: start DPoP here
@@ -202,8 +203,7 @@ def initial_token_request(
     resp.raise_for_status()
     token_body = resp.json()
 
-    # Validate against request DID (even if original "username" was a handle)
-    assert token_body["sub"] == auth_request["did"]
+    # IMPORTANT: the 'sub' field must be verified against the original request by calling code
 
     return token_body, dpop_nonce
 
