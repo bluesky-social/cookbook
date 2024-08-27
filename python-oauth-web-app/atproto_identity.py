@@ -1,22 +1,21 @@
 import re
 import sys
-import json
 import requests
 import dns.resolver
 from typing import Optional
 
-from atproto_security import is_safe_url, hardened_http
+from atproto_security import hardened_http
 
 HANDLE_REGEX = r"^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
 DID_REGEX = r"^did:[a-z]+:[a-zA-Z0-9._:%-]*[a-zA-Z0-9._-]$"
 
 
 def is_valid_handle(handle: str) -> bool:
-    return re.match(HANDLE_REGEX, handle) != None
+    return re.match(HANDLE_REGEX, handle) is not None
 
 
 def is_valid_did(did: str) -> bool:
-    return re.match(DID_REGEX, did) != None
+    return re.match(DID_REGEX, did) is not None
 
 
 def handle_from_doc(doc: dict) -> str:
@@ -96,7 +95,7 @@ def resolve_did(did: str) -> Optional[dict]:
         domain = did[8:]
         # IMPORTANT: domain is untrusted input. SSRF mitigations are necessary
         # "handle" validation works to check that domain is a simple hostname
-        assert valid_handle(domain)
+        assert is_valid_handle(domain)
         try:
             with hardened_http.get_session() as sess:
                 resp = sess.get(f"https://{domain}/.well-known/did.json")
@@ -118,8 +117,8 @@ def pds_endpoint(doc: dict) -> str:
 if __name__ == "__main__":
     assert is_valid_did("did:web:example.com")
     assert is_valid_did("did:plc:abc123")
-    assert is_valid_did("") == False
-    assert is_valid_did("did:asdfasdf") == False
+    assert is_valid_did("") is False
+    assert is_valid_did("did:asdfasdf") is False
     handle = sys.argv[1]
     if not is_valid_handle(handle):
         print("invalid handle!")

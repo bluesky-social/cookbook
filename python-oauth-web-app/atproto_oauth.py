@@ -16,7 +16,7 @@ def is_valid_authserver_meta(obj: dict, url: str) -> bool:
     issuer_url = urlparse(obj["issuer"])
     assert issuer_url.hostname == fetch_url.hostname
     assert issuer_url.scheme == "https"
-    assert issuer_url.port == None
+    assert issuer_url.port is None
     assert issuer_url.path in ["", "/"]
     assert issuer_url.params == ""
     assert issuer_url.fragment == ""
@@ -30,13 +30,13 @@ def is_valid_authserver_meta(obj: dict, url: str) -> bool:
     assert "ES256" in obj["token_endpoint_auth_signing_alg_values_supported"]
     # TODO: not yet supported by prod servers
     # assert "atproto" in obj["scopes_supported"]
-    assert True == obj["authorization_response_iss_parameter_supported"]
+    assert obj["authorization_response_iss_parameter_supported"] is True
     assert obj["pushed_authorization_request_endpoint"] is not None
-    assert True == obj["require_pushed_authorization_requests"]
+    assert obj["require_pushed_authorization_requests"] is True
     assert "ES256" in obj["dpop_signing_alg_values_supported"]
     if "require_request_uri_registration" in obj:
-        assert True == obj["require_request_uri_registration"]
-    assert True == obj["client_id_metadata_document_supported"]
+        assert obj["require_request_uri_registration"] is True
+    assert obj["client_id_metadata_document_supported"] is True
 
     return True
 
@@ -71,7 +71,6 @@ def fetch_authserver_meta(url: str) -> dict:
 def client_assertion_jwt(
     client_id: str, authserver_url: str, client_secret_jwk: JsonWebKey
 ) -> str:
-
     client_assertion = jwt.encode(
         {"alg": "ES256", "kid": client_secret_jwk["kid"]},
         {
@@ -120,7 +119,6 @@ def send_par_auth_request(
     dpop_private_jwk: JsonWebKey,
 ) -> (str, Any):
     par_url = authserver_meta["pushed_authorization_request_endpoint"]
-    issuer = authserver_meta["issuer"]
     state = generate_token()
     pkce_verifier = generate_token(48)
 
@@ -194,8 +192,6 @@ def initial_token_request(
     app_url: str,
     client_secret_jwk: JsonWebKey,
 ) -> (dict, str):
-
-    state = auth_request["state"]
     authserver_url = auth_request["authserver_iss"]
 
     # Re-fetch server metadata
@@ -260,7 +256,6 @@ def refresh_token_request(
     app_url: str,
     client_secret_jwk: JsonWebKey,
 ) -> (dict, str):
-
     authserver_url = user["authserver_iss"]
 
     # Re-fetch server metadata
@@ -349,7 +344,6 @@ def pds_dpop_jwt(
 # Helper to demonstrate making a request (HTTP GET or POST) to the user's PDS ("Resource Server" in OAuth terminology) using DPoP and access token.
 # This method returns a 'requests' reponse, without checking status code.
 def pds_authed_req(method: str, url: str, user: dict, db: Any, body=None) -> Any:
-
     dpop_private_jwk = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
     dpop_pds_nonce = user["dpop_pds_nonce"]
     access_token = user["access_token"]

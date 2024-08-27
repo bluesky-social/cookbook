@@ -1,12 +1,11 @@
-import time
+import json
 import sqlite3
 import functools
 from datetime import datetime, timezone
-from urllib.parse import urlparse, parse_qs, urlencode
+from urllib.parse import urlencode
 from flask import (
     Flask,
     flash,
-    url_for,
     redirect,
     render_template,
     jsonify,
@@ -16,13 +15,22 @@ from flask import (
     abort,
 )
 from authlib.jose import JsonWebKey
-from authlib.common.security import generate_token
-from authlib.jose import jwt
-from authlib.oauth2.rfc7636 import create_s256_code_challenge
 
-from atproto_identity import *
-from atproto_oauth import *
-from atproto_security import is_safe_url, hardened_http
+from atproto_identity import (
+    is_valid_did,
+    is_valid_handle,
+    resolve_identity,
+    pds_endpoint,
+)
+from atproto_oauth import (
+    refresh_token_request,
+    pds_authed_req,
+    resolve_pds_authserver,
+    initial_token_request,
+    send_par_auth_request,
+    fetch_authserver_meta,
+)
+from atproto_security import is_safe_url
 
 app = Flask(__name__)
 
@@ -173,7 +181,7 @@ def oauth_login():
         initial_url = username
         try:
             authserver_url = resolve_pds_authserver(initial_url)
-        except:
+        except Exception:
             authserver_url = initial_url
     else:
         flash("Not a valid handle, DID, or auth server URL")
@@ -295,7 +303,7 @@ def oauth_callback():
         assert authserver_url == authserver_iss
 
     # TODO: verify that returned scope matches request (waiting for PDS update)
-    #assert row["scope"] == tokens["scope"]
+    # assert row["scope"] == tokens["scope"]
 
     # Save session (including auth tokens) in database
     print(f"saving oauth_session to DB  {did}")
