@@ -42,6 +42,18 @@ def is_valid_authserver_meta(obj: dict, url: str) -> bool:
     return True
 
 
+# Takes a Resource Server (PDS) URL, and tries to resolve it to an Authorization Server host/origin
+def resolve_pds_authserver(url: str) -> str:
+    # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
+    assert is_safe_url(pds_url)
+    with hardened_http.get_session() as sess:
+        resp = sess.get(f"{url}/.well-known/oauth-protected-resource")
+    resp.raise_for_status()
+    # Additionally check that status is exactly 200 (not just 2xx)
+    assert resp.status_code == 200
+    authserver_url = resp.json()["authorization_servers"][0]
+
+
 # Does an HTTP GET for Authorization Server (entryway) metadata, verify the contents, and return the metadata as a dict
 def fetch_authserver_meta(url: str) -> dict:
     print("Auth Server Metadata URL: " + url)
@@ -67,6 +79,7 @@ def send_par_auth_request(
     redirect_uri: str,
     scope: str,
     client_secret_jwk: JsonWebKey,
+    dpop_private_jwk: JsonWebKey,
 ) -> (str, Any):
     par_url = authserver_meta["pushed_authorization_request_endpoint"]
     issuer = authserver_meta["issuer"]
@@ -122,7 +135,12 @@ def send_par_auth_request(
 # Completes the auth flow by sending an initial auth token request.
 # Returns token response (dict) and DPoP nonce (str)
 def initial_token_request(
-    auth_request: dict, code: str, app_url: str, client_secret_jwk: JsonWebKey
+    auth_request: dict,
+    code: str,
+    app_url: str,
+    dpop_nonce: str,
+    dpop_private_jwk: JsonWebKey,
+    client_secret_jwk: JsonWebKey,
 ) -> (dict, str):
 
     state = auth_request["state"]
@@ -213,7 +231,7 @@ def initial_token_request(
 
 # Helper to demonstrate making a request (HTTP GET or POST) to the user's PDS ("Resource Server" in OAuth terminology) using DPoP and access token.
 # This method returns a 'requests' reponse, without checking status code.
-def pds_authed_req(method, url, user, db, body=None):
+def pds_authed_req(method: str, url: str, user: dict, db: Any, body=None) -> Any:
 
     dpop_key = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
     dpop_pub_jwk = json.loads(dpop_key.as_json(is_private=False))

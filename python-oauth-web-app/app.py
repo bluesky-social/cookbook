@@ -163,17 +163,7 @@ def oauth_login():
         did, handle, did_doc = resolve_identity(username)
         pds_url = pds_endpoint(did_doc)
         print(f"account PDS: {pds_url}")
-
-        # Fetch PDS (Resource Server) OAuth metadata.
-        # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
-        assert is_safe_url(pds_url)
-        with hardened_http.get_session() as sess:
-            resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
-        resp.raise_for_status()
-        # Additionally check that status is exactly 200 (not just 2xx)
-        assert resp.status_code == 200
-        authserver_url = resp.json()["authorization_servers"][0]
-
+        authserver_url = resolve_pds_to_authserver(pds_url)
     elif username.startswith("https://") and is_safe_url(username):
         # When starting with an auth server, we don't know about the account yet.
         did, handle, pds_url = None, None, None
@@ -181,13 +171,7 @@ def oauth_login():
         # Check if this is a Resource Server (PDS) URL; otherwise assume it is authorization server
         initial_url = username
         try:
-            # IMPORTANT: PDS endpoint URL is untrusted input, SSRF mitigations are needed
-            with hardened_http.get_session() as sess:
-                resp = sess.get(f"{initial_url}/.well-known/oauth-protected-resource")
-            resp.raise_for_status()
-            # Additionally check that status is exactly 200 (not just 2xx)
-            assert resp.status_code == 200
-            authserver_url = resp.json()["authorization_servers"][0]
+            authserver_url = resolve_pds_to_authserver(initial_url)
         except:
             authserver_url = initial_url
     else:
@@ -239,7 +223,7 @@ def oauth_login():
     # This field is confusingly named: it is basically a token to refering back to the successful PAR request.
     par_request_uri = resp.json()["request_uri"]
 
-    print(f"saving oauth_auth_request to DB: {state}")
+    print(f"saving oauth_auth_request to DB  state={state}")
     query_db(
         "INSERT INTO oauth_auth_request (state, authserver_iss, did, handle, pds_url, pkce_verifier, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
@@ -303,14 +287,7 @@ def oauth_callback():
         assert is_valid_did(did)
         did, handle, did_doc = resolve_identity(did)
         pds_url = pds_endpoint(did_doc)
-
-        assert is_safe_url(pds_url)
-        with hardened_http.get_session() as sess:
-            resp = sess.get(f"{pds_url}/.well-known/oauth-protected-resource")
-        resp.raise_for_status()
-        # Additionally check that status is exactly 200 (not just 2xx)
-        assert resp.status_code == 200
-        authserver_url = resp.json()["authorization_servers"][0]
+        authserver_url = resolve_pds_to_authserver(pds_url)
 
         # Verify that Authorization Server matches
         assert authserver_url == authserver_iss
@@ -318,6 +295,7 @@ def oauth_callback():
     # TODO: verify that returned scope matches request
 
     # Save session (including auth tokens) in database
+    print(f"saving oauth_session to DB  {did}")
     query_db(
         "INSERT OR REPLACE INTO oauth_session (did, handle, pds_url, authserver_iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
