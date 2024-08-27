@@ -131,11 +131,9 @@ def oauth_client_metadata():
             "dpop_bound_access_tokens": True,
             "application_type": "web",
             "redirect_uris": [f"{app_url}oauth/callback"],
-            "subject_type": "public",
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
-            # TODO: offline access here is deprecated
-            "scope": "atproto transition:generic offline_access",
+            "scope": "atproto transition:generic",
             "token_endpoint_auth_method": "private_key_jwt",
             "token_endpoint_auth_signing_alg": "ES256",
             # NOTE: in theory we can return the public key (in JWK format) inline
@@ -203,9 +201,7 @@ def oauth_login():
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
 
     # OAuth scopes requested by this app
-    # TODO: not supported yet
-    # scope = "atproto transition:generic"
-    scope = "offline_access"
+    scope = "atproto transition:generic"
 
     # Dynamically compute our "client_id" based on the request HTTP Host
     app_url = request.url_root.replace("http://", "https://")
