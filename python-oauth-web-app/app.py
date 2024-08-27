@@ -223,7 +223,7 @@ def oauth_login():
 
     print(f"saving oauth_auth_request to DB  state={state}")
     query_db(
-        "INSERT INTO oauth_auth_request (state, authserver_iss, did, handle, pds_url, pkce_verifier, dpop_authserver_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT INTO oauth_auth_request (state, authserver_iss, did, handle, pds_url, pkce_verifier, scope, dpop_authserver_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);",
         [
             state,
             authserver_meta["issuer"],
@@ -231,6 +231,7 @@ def oauth_login():
             handle,  # might be None
             pds_url,  # might be None
             pkce_verifier,
+            scope,
             dpop_authserver_nonce,
             dpop_private_jwk.as_json(is_private=True),
         ],
@@ -293,7 +294,8 @@ def oauth_callback():
         # Verify that Authorization Server matches
         assert authserver_url == authserver_iss
 
-    # TODO: verify that returned scope matches request
+    # TODO: verify that returned scope matches request (waiting for PDS update)
+    #assert row["scope"] == tokens["scope"]
 
     # Save session (including auth tokens) in database
     print(f"saving oauth_session to DB  {did}")

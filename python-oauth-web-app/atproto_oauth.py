@@ -30,8 +30,7 @@ def is_valid_authserver_meta(obj: dict, url: str) -> bool:
     assert "ES256" in obj["token_endpoint_auth_signing_alg_values_supported"]
     # TODO: not yet supported by prod servers
     # assert "atproto" in obj["scopes_supported"]
-    # TODO: not mentioned in spec but should be?
-    # assert True == obj["authorization_response_iss_parameter_supported"]
+    assert True == obj["authorization_response_iss_parameter_supported"]
     assert obj["pushed_authorization_request_endpoint"] is not None
     assert True == obj["require_pushed_authorization_requests"]
     assert "ES256" in obj["dpop_signing_alg_values_supported"]
