@@ -24,6 +24,7 @@ managed = true
 dev-dependencies = [
     "black>=24.8.0",
     "ruff>=0.6.2",
+    "mypy>=1.11.2",
 ]
 
 [tool.hatch.metadata]

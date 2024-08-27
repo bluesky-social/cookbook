@@ -1,5 +1,5 @@
 from urllib.parse import urlparse
-from typing import Any
+from typing import Any, Tuple
 import time
 import json
 from authlib.jose import JsonWebKey
@@ -117,7 +117,7 @@ def send_par_auth_request(
     scope: str,
     client_secret_jwk: JsonWebKey,
     dpop_private_jwk: JsonWebKey,
-) -> (str, Any):
+) -> Tuple[str, str, str, Any]:
     par_url = authserver_meta["pushed_authorization_request_endpoint"]
     state = generate_token()
     pkce_verifier = generate_token(48)
@@ -191,7 +191,7 @@ def initial_token_request(
     code: str,
     app_url: str,
     client_secret_jwk: JsonWebKey,
-) -> (dict, str):
+) -> Tuple[dict, str]:
     authserver_url = auth_request["authserver_iss"]
 
     # Re-fetch server metadata
@@ -255,7 +255,7 @@ def refresh_token_request(
     user: dict,
     app_url: str,
     client_secret_jwk: JsonWebKey,
-) -> (dict, str):
+) -> Tuple[dict, str]:
     authserver_url = user["authserver_iss"]
 
     # Re-fetch server metadata
@@ -263,7 +263,6 @@ def refresh_token_request(
 
     # Construct token request fields
     client_id = f"{app_url}oauth/client-metadata.json"
-    # XXX redirect_uri = f"{app_url}oauth/callback"
 
     # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
     client_assertion = client_assertion_jwt(
@@ -276,7 +275,6 @@ def refresh_token_request(
         "refresh_token": user["refresh_token"],
         "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
         "client_assertion": client_assertion,
-        # XXX "redirect_uri": redirect_uri,
     }
 
     # Create DPoP header JWT, using the existing DPoP signing key for this account/session

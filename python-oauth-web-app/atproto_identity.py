@@ -2,7 +2,7 @@ import re
 import sys
 import requests
 import dns.resolver
-from typing import Optional
+from typing import Optional, Tuple
 
 from atproto_security import hardened_http
 
@@ -18,7 +18,7 @@ def is_valid_did(did: str) -> bool:
     return re.match(DID_REGEX, did) is not None
 
 
-def handle_from_doc(doc: dict) -> str:
+def handle_from_doc(doc: dict) -> Optional[str]:
     for aka in doc.get("alsoKnownAs", []):
         if aka.startswith("at://"):
             handle = aka[5:]
@@ -28,7 +28,7 @@ def handle_from_doc(doc: dict) -> str:
 
 
 # resolves an identity (handle or DID) to a DID, handle, and DID document. verifies handle bi-directionally.
-def resolve_identity(atid: str) -> (str, str, dict):
+def resolve_identity(atid: str) -> Tuple[str, str, dict]:
     if is_valid_handle(atid):
         handle = atid
         did = resolve_handle(handle)
@@ -123,8 +123,10 @@ if __name__ == "__main__":
     if not is_valid_handle(handle):
         print("invalid handle!")
         sys.exit(-1)
+    assert handle is not None
     did = resolve_handle(handle)
     print(f"DID: {did}")
+    assert did is not None
     doc = resolve_did(did)
     print(doc)
     resolve_identity(handle)
