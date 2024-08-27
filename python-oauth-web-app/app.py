@@ -36,7 +36,8 @@ CLIENT_PUB_JWK = json.loads(CLIENT_SECRET_JWK.as_json(is_private=False))
 assert "d" not in CLIENT_PUB_JWK
 
 
-# Helpers for managing database connection
+# Helpers for managing database connection.
+# Note that you could use a sqlite ":memory:" database instead. In that case you would want to have a global sqlite connection, instead of re-connecting per connection. This file-based setup is following the Flask docs/tutorial.
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
@@ -163,7 +164,7 @@ def oauth_login():
         did, handle, did_doc = resolve_identity(username)
         pds_url = pds_endpoint(did_doc)
         print(f"account PDS: {pds_url}")
-        authserver_url = resolve_pds_to_authserver(pds_url)
+        authserver_url = resolve_pds_authserver(pds_url)
     elif username.startswith("https://") and is_safe_url(username):
         # When starting with an auth server, we don't know about the account yet.
         did, handle, pds_url = None, None, None
@@ -171,7 +172,7 @@ def oauth_login():
         # Check if this is a Resource Server (PDS) URL; otherwise assume it is authorization server
         initial_url = username
         try:
-            authserver_url = resolve_pds_to_authserver(initial_url)
+            authserver_url = resolve_pds_authserver(initial_url)
         except:
             authserver_url = initial_url
     else:
@@ -191,10 +192,7 @@ def oauth_login():
         return render_template("login.html"), 400
 
     # Generate DPoP private signing key for this account session. In theory this could be defered until the token request at the end of the athentication flow, but doing it now allows early binding during the PAR request.
-    # TODO: nonce?
-    dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True).as_json(
-        is_private=True
-    )
+    dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
 
     # OAuth scopes requested by this app
     # TODO: not supported yet
@@ -207,8 +205,7 @@ def oauth_login():
     client_id = f"{app_url}oauth/client-metadata.json"
 
     # Submit OAuth Pushed Authentication Request (PAR). We could have constructed a more complex authentication request URL below instead, but there are some advantages with PAR, including failing fast, early DPoP binding, and no URL length limitations.
-    # TODO: use dpop_private_jwk here, along with a nonce?
-    pkce_verifier, state, dpop_nonce, resp = send_par_auth_request(
+    pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(
         authserver_url,
         authserver_meta,
         login_hint,
@@ -216,6 +213,7 @@ def oauth_login():
         redirect_uri,
         scope,
         CLIENT_SECRET_JWK,
+        dpop_private_jwk,
     )
     if resp.status_code == 400:
         print(f"PAR HTTP 400: {resp.json()}")
@@ -225,7 +223,7 @@ def oauth_login():
 
     print(f"saving oauth_auth_request to DB  state={state}")
     query_db(
-        "INSERT INTO oauth_auth_request (state, authserver_iss, did, handle, pds_url, pkce_verifier, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT INTO oauth_auth_request (state, authserver_iss, did, handle, pds_url, pkce_verifier, dpop_authserver_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             state,
             authserver_meta["issuer"],
@@ -233,8 +231,8 @@ def oauth_login():
             handle,  # might be None
             pds_url,  # might be None
             pkce_verifier,
-            dpop_nonce,
-            dpop_private_jwk,
+            dpop_authserver_nonce,
+            dpop_private_jwk.as_json(is_private=True),
         ],
     )
 
@@ -272,8 +270,11 @@ def oauth_callback():
 
     # Complete the auth flow by requesting auth tokens from the authorization server.
     app_url = request.url_root.replace("http://", "https://")
-    tokens, dpop_nonce = initial_token_request(
-        row, authorization_code, app_url, CLIENT_SECRET_JWK
+    tokens, dpop_authserver_nonce = initial_token_request(
+        row,
+        authorization_code,
+        app_url,
+        CLIENT_SECRET_JWK,
     )
 
     # Now we verify the account authentication against the original request
@@ -287,7 +288,7 @@ def oauth_callback():
         assert is_valid_did(did)
         did, handle, did_doc = resolve_identity(did)
         pds_url = pds_endpoint(did_doc)
-        authserver_url = resolve_pds_to_authserver(pds_url)
+        authserver_url = resolve_pds_authserver(pds_url)
 
         # Verify that Authorization Server matches
         assert authserver_url == authserver_iss
@@ -297,7 +298,7 @@ def oauth_callback():
     # Save session (including auth tokens) in database
     print(f"saving oauth_session to DB  {did}")
     query_db(
-        "INSERT OR REPLACE INTO oauth_session (did, handle, pds_url, authserver_iss, access_token, refresh_token, dpop_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
+        "INSERT OR REPLACE INTO oauth_session (did, handle, pds_url, authserver_iss, access_token, refresh_token, dpop_authserver_nonce, dpop_private_jwk) VALUES(?, ?, ?, ?, ?, ?, ?, ?);",
         [
             did,
             handle,
@@ -305,7 +306,7 @@ def oauth_callback():
             authserver_iss,
             tokens["access_token"],
             tokens["refresh_token"],
-            dpop_nonce,
+            dpop_authserver_nonce,
             row["dpop_private_jwk"],
         ],
     )
@@ -316,6 +317,32 @@ def oauth_callback():
     session["user_handle"] = handle
 
     return redirect("/bsky/post")
+
+
+# Example endpoint demonstrating manual refreshing of auth token.
+# This isn't something you would do in a real application, it is just to trigger this codepath.
+@login_required
+@app.route("/oauth/refresh")
+def oauth_refresh():
+    app_url = request.url_root.replace("http://", "https://")
+
+    tokens, dpop_authserver_nonce = refresh_token_request(
+        g.user, app_url, CLIENT_SECRET_JWK
+    )
+
+    # persist updated tokens (and DPoP nonce) to database
+    query_db(
+        "UPDATE oauth_session SET access_token = ?, refresh_token = ?, dpop_authserver_nonce = ? WHERE did = ?;",
+        [
+            tokens["access_token"],
+            tokens["refresh_token"],
+            dpop_authserver_nonce,
+            g.user["did"],
+        ],
+    )
+
+    flash("Token refreshed!")
+    return redirect("/")
 
 
 @login_required
@@ -347,6 +374,8 @@ def bsky_post():
         },
     }
     resp = pds_authed_req("POST", req_url, body=body, user=g.user, db=get_db())
+    if resp.status_code not in [200, 201]:
+        print(f"PDS HTTP Error: {resp.json()}")
     resp.raise_for_status()
 
     flash("Post record created in PDS!")

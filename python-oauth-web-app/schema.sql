@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS oauth_auth_request (
     handle TEXT,
     pds_url TEXT,
     pkce_verifier TEXT NOT NULL,
-    dpop_nonce TEXT NOT NULL,
+    dpop_authserver_nonce TEXT NOT NULL,
     dpop_private_jwk TEXT NOT NULL
 );
 
@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS oauth_session (
     authserver_iss TEXT NOT NULL,
     access_token TEXT,
     refresh_token TEXT,
-    dpop_nonce TEXT NOT NULL,
+    dpop_authserver_nonce TEXT NOT NULL,
+    dpop_pds_nonce TEXT,
     dpop_private_jwk TEXT NOT NULL
 );
