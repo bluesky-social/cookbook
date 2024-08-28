@@ -298,8 +298,8 @@ def oauth_callback():
         # Verify that Authorization Server matches
         assert authserver_url == authserver_iss
 
-    # TODO: verify that returned scope matches request (waiting for PDS update)
-    # assert row["scope"] == tokens["scope"]
+    # Verify that returned scope matches request (waiting for PDS update)
+    assert row["scope"] == tokens["scope"]
 
     # Save session (including auth tokens) in database
     print(f"saving oauth_session to DB  {did}")
