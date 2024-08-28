@@ -57,15 +57,8 @@ def resolve_identity(atid: str) -> Tuple[str, str, dict]:
 
 
 def resolve_handle(handle: str) -> Optional[str]:
-    # first try HTTP well-known
-    # IMPORTANT: 'handle' domain is untrusted user input. SSRF mitigations are necessary
-    try:
-        with hardened_http.get_session() as sess:
-            resp = sess.get(f"https://{handle}/.well-known/atproto-did")
-    except requests.exceptions.ConnectionError:
-        return None
 
-    # then try TXT record
+    # first try TXT record
     try:
         for record in dns.resolver.resolve(f"_atproto.{handle}", "TXT"):
             val = record.to_text().replace('"', "")
@@ -73,8 +66,17 @@ def resolve_handle(handle: str) -> Optional[str]:
                 val = val[4:]
                 if is_valid_did(val):
                     return val
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+    except Exception:
         pass
+
+    # then try HTTP well-known
+    # IMPORTANT: 'handle' domain is untrusted user input. SSRF mitigations are necessary
+    try:
+        with hardened_http.get_session() as sess:
+            resp = sess.get(f"https://{handle}/.well-known/atproto-did")
+    except Exception:
+        return None
+
     if resp.status_code != 200:
         return None
     did = resp.text.split()[0]
