@@ -9,7 +9,8 @@ import crypto from "crypto"; // for generating unique hashes
 dotenv.config();
 
 const COOKIES_PATH = path.join(__dirname, "cookies.json");
-const IntervalTime = 1000 * 60; // 1 minute
+const HASHES_PATH = path.join(__dirname, "lastTweetHashes.json");
+const IntervalTime = 1000 * 60; //* 5; // 5 minutes
 
 // Create a Bluesky Agent
 const agent = new BskyAgent({
@@ -32,8 +33,22 @@ async function saveCookies(page: puppeteer.Page) {
     console.log("Cookies saved to file.");
 }
 
-// Function to scrape the latest tweet text and generate a unique "id"
-async function scrapeLatestTweet(username: string) {
+// Function to load the last three tweet hashes from a file
+function loadLastTweetHashes(): string[] {
+    if (fs.existsSync(HASHES_PATH)) {
+        return JSON.parse(fs.readFileSync(HASHES_PATH, "utf8"));
+    }
+    return [];
+}
+
+// Function to save the last three tweet hashes to a file
+function saveLastTweetHashes(hashes: string[]) {
+    fs.writeFileSync(HASHES_PATH, JSON.stringify(hashes, null, 2));
+    console.log("Last tweet hashes saved to file.");
+}
+
+// Function to scrape the latest three tweets and handle quote tweets and image URLs properly
+async function scrapeLatestTweets(username: string) {
     const browser = await puppeteer.launch({
         headless: true, // Launch with GUI for manual login
     });
@@ -52,13 +67,55 @@ async function scrapeLatestTweet(username: string) {
 
         console.log(`Navigated to profile: ${profileUrl}`);
 
-        // Wait for tweet to be visible, give it a longer timeout in case of slow loading
-        await page.waitForSelector("article div[lang]", { timeout: 30000 });
+        // Wait for the tweets to be visible
+        await page.waitForSelector("article div[data-testid='tweetText']", {
+            timeout: 30000,
+        });
 
-        // Scrape the latest tweet
-        const latestTweet = await page.evaluate(() => {
-            const tweetElement = document.querySelector("article div[lang]"); // Finds the first tweet on the page
-            return tweetElement ? tweetElement.textContent : null;
+        // Scrape the latest three tweets and their quotes if they exist, and also capture image URLs
+        const latestTweets = await page.evaluate(() => {
+            const tweetElements = Array.from(
+                document.querySelectorAll("article"),
+            );
+
+            return tweetElements.slice(0, 3).map((el) => {
+                // Main tweet text
+                const mainTweetText =
+                    el.querySelector("div[data-testid='tweetText']")
+                        ?.textContent || "";
+
+                // Check if the tweet contains a quoted tweet (look for nested div with data-testid='tweetText')
+                let quotedTweetText = "";
+                const quoteElement = el.querySelector(
+                    "div[aria-labelledby] div[data-testid='tweetText']",
+                );
+
+                // Capture the quote, but only if it's not duplicating the main tweet
+                if (
+                    quoteElement &&
+                    quoteElement.textContent !== mainTweetText
+                ) {
+                    quotedTweetText = `\n\nQuoted tweet: "${quoteElement.textContent}"`;
+                }
+
+                // Initialize imageUrls as a string array
+                let imageUrls: string[] = [];
+
+                // Select image elements and cast to HTMLImageElement to access 'src'
+                const imageElements = el.querySelectorAll(
+                    'img[alt="Image"]',
+                ) as NodeListOf<HTMLImageElement>;
+
+                if (imageElements.length > 0) {
+                    imageUrls = Array.from(imageElements).map((img) => img.src); // Get the src attribute of each image
+                }
+
+                // Return the combined main tweet text, quoted tweet text (if any), and image URLs
+                return {
+                    text: mainTweetText.trim() + quotedTweetText,
+                    images: imageUrls, // Attach the array of image URLs
+                };
+            });
         });
 
         // Save session cookies after navigating (for future launches)
@@ -66,27 +123,26 @@ async function scrapeLatestTweet(username: string) {
 
         await browser.close();
 
-        if (!latestTweet) {
-            throw new Error("No tweet found");
+        if (latestTweets.length === 0) {
+            throw new Error("No tweets found");
         }
 
-        console.log(`Latest tweet: ${latestTweet}`);
+        console.log(`Latest tweets: ${JSON.stringify(latestTweets, null, 2)}`);
 
-        // Generate a hash ID from the tweet text (to simulate an ID)
-        const tweetId = crypto
-            .createHash("sha256")
-            .update(latestTweet)
-            .digest("hex");
+        // Generate a hash ID from each tweet text (to simulate an ID)
+        const tweetData = latestTweets.map((tweet) => ({
+            id: crypto.createHash("sha256").update(tweet.text).digest("hex"),
+            text: tweet.text,
+            images: tweet.images, // Include the image URLs in the tweet data
+        }));
 
-        return { id: tweetId, text: latestTweet };
+        return tweetData;
     } catch (error) {
         console.error("Error during scraping or page interaction:", error);
         await browser.close();
         throw error;
     }
 }
-
-let lastTweetId: string | null = null;
 
 async function main() {
     try {
@@ -98,40 +154,69 @@ async function main() {
         });
         console.log("Logged into Bluesky successfully.");
 
+        // Load the last three tweet hashes from file
+        let lastTweetIds = loadLastTweetHashes();
+
         setInterval(async () => {
-            console.log("Starting new interval to check for latest tweet...");
+            console.log("Starting new interval to check for latest tweets...");
             try {
-                const tweet = await scrapeLatestTweet(
+                const tweets = await scrapeLatestTweets(
                     process.env.TWITTER_PROFILE!,
                 );
 
-                if (tweet.id !== lastTweetId) {
-                    const postContent = tweet.text;
-                    console.log(
-                        `New tweet found. Tweet ID: ${tweet.id}. Posting to Bluesky...`,
-                    );
+                for (const tweet of tweets) {
+                    if (!lastTweetIds.includes(tweet.id)) {
+                        // Start with the tweet text
+                        let postContent = `${tweet.text}`;
 
-                    try {
-                        // Correct the post format for Bluesky
-                        await agent.post({
-                            $type: "app.bsky.feed.post", // Specify the type explicitly
-                            text: postContent, // Ensure text is correctly passed
-                        });
+                        // If the tweet contains images, append them to the post
+                        if (tweet.images.length > 0) {
+                            postContent += `\n\n(attached: ${tweet.images.join(", ")})`;
+                        }
+
+                        // Add two new lines and the "mirrored from X" text at the bottom
+                        postContent += `\n\n(mirrored from X)`;
+
                         console.log(
-                            `Successfully posted tweet to Bluesky: "${postContent}"`,
+                            `New tweet found. Tweet ID: "${tweet.id}". Posting to Bluesky...`,
                         );
 
-                        // Update the last posted tweet ID
-                        lastTweetId = tweet.id;
-                        console.log(`Updated lastTweetId to: ${lastTweetId}`);
-                    } catch (error) {
-                        console.error("Error while posting to Bluesky:", error);
+                        try {
+                            // Correct the post format for Bluesky
+                            await agent.post({
+                                $type: "app.bsky.feed.post", // Specify the type explicitly
+                                text: postContent, // Ensure text is correctly passed with the added content
+                            });
+                            console.log(
+                                `Successfully posted tweet to Bluesky: "${postContent}"`,
+                            );
+
+                            // Update the last posted tweet IDs
+                            lastTweetIds.push(tweet.id);
+                            if (lastTweetIds.length > 3) {
+                                // Keep only the latest three tweet IDs to avoid storing too many
+                                lastTweetIds = lastTweetIds.slice(-3);
+                            }
+                            console.log(
+                                `Updated lastTweetIds to: "${lastTweetIds}"`,
+                            );
+
+                            // Save the last tweet IDs to the file
+                            saveLastTweetHashes(lastTweetIds);
+                        } catch (error) {
+                            console.error(
+                                "Error while posting to Bluesky:",
+                                error,
+                            );
+                        }
+                    } else {
+                        console.log(
+                            `Tweet with ID "${tweet.id}" has already been posted. Skipping.`,
+                        );
                     }
-                } else {
-                    console.log("No new tweet found. Skipping posting.");
                 }
             } catch (error) {
-                console.error("Error fetching or posting tweet:", error);
+                console.error("Error fetching or posting tweets:", error);
             }
         }, IntervalTime);
     } catch (error) {

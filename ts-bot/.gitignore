@@ -6,3 +6,6 @@ node_modules/
 
 # cookie files
 cookies.json
+
+# recent tweet hashes
+lastTweetHashes.json
