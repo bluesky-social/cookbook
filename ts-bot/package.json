@@ -1,8 +1,9 @@
 {
-  "dependencies": {
-    "@atproto/api": "^0.6.20",
-    "cron": "^3.1.0",
-    "dotenv": "^16.3.1",
-    "process": "^0.11.10"
-  }
+    "dependencies": {
+        "@atproto/api": "^0.6.20",
+        "cron": "^3.1.7",
+        "dotenv": "^16.4.5",
+        "process": "^0.11.10",
+        "puppeteer": "^23.6.0"
+    }
 }
