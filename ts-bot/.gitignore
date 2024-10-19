@@ -9,3 +9,7 @@ cookies.json
 
 # recent tweet hashes
 lastTweetHashes.json
+
+# debugging script for puppeteer
+puppeteer.js
+puppeteer.ts

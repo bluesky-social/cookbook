@@ -1,9 +1,10 @@
 {
-    "dependencies": {
-        "@atproto/api": "^0.6.20",
-        "cron": "^3.1.7",
-        "dotenv": "^16.4.5",
-        "process": "^0.11.10",
-        "puppeteer": "^23.6.0"
-    }
+  "dependencies": {
+    "@atproto/api": "^0.6.20",
+    "cron": "^3.1.7",
+    "dotenv": "^16.4.5",
+    "process": "^0.11.10",
+    "puppeteer": "^23.6.0",
+    "twitter-api-v2": "^1.18.0"
+  }
 }

@@ -11,6 +11,7 @@ dotenv.config();
 const COOKIES_PATH = path.join(__dirname, "cookies.json");
 const HASHES_PATH = path.join(__dirname, "lastTweetHashes.json");
 const IntervalTime = 1000 * 60; //* 5; // 5 minutes
+const HASH_LOG_SIZE = 10;
 
 // Create a Bluesky Agent
 const agent = new BskyAgent({
@@ -90,7 +91,6 @@ async function scrapeLatestTweets(username: string) {
                     "div[aria-labelledby] div[data-testid='tweetText']",
                 );
 
-                // Capture the quote, but only if it's not duplicating the main tweet
                 if (
                     quoteElement &&
                     quoteElement.textContent !== mainTweetText
@@ -98,22 +98,33 @@ async function scrapeLatestTweets(username: string) {
                     quotedTweetText = `\n\nQuoted tweet: "${quoteElement.textContent}"`;
                 }
 
-                // Initialize imageUrls as a string array
+                // Initialize arrays for image and video URLs
                 let imageUrls: string[] = [];
+                let videoUrls: string[] = [];
 
                 // Select image elements and cast to HTMLImageElement to access 'src'
                 const imageElements = el.querySelectorAll(
                     'img[alt="Image"]',
                 ) as NodeListOf<HTMLImageElement>;
-
                 if (imageElements.length > 0) {
                     imageUrls = Array.from(imageElements).map((img) => img.src); // Get the src attribute of each image
                 }
 
-                // Return the combined main tweet text, quoted tweet text (if any), and image URLs
+                // Select video source elements and get the src attribute
+                const videoElements = el.querySelectorAll(
+                    'source[type="video/mp4"]',
+                ) as NodeListOf<HTMLSourceElement>;
+                if (videoElements.length > 0) {
+                    videoUrls = Array.from(videoElements).map(
+                        (video) => video.src,
+                    ); // Get the src attribute of each video
+                }
+
+                // Return the combined main tweet text, quoted tweet text (if any), image URLs, and video URLs
                 return {
                     text: mainTweetText.trim() + quotedTweetText,
                     images: imageUrls, // Attach the array of image URLs
+                    videos: videoUrls, // Attach the array of video URLs
                 };
             });
         });
@@ -165,24 +176,16 @@ async function main() {
                 );
 
                 for (const tweet of tweets) {
-                    if (!lastTweetIds.includes(tweet.id)) {
-                        // Start with the tweet text
-                        let postContent = `${tweet.text}`;
-
-                        // If the tweet contains images, append them to the post
-                        if (tweet.images.length > 0) {
-                            postContent += `\n\n(attached: ${tweet.images.join(", ")})`;
-                        }
-
-                        // Add two new lines and the "mirrored from X" text at the bottom
-                        postContent += `\n\n(mirrored from X)`;
-
+                    // Check if the tweet ID (hash) already exists in the lastTweetIds
+                    if (!lastTweetIds.some((id) => id === tweet.id)) {
+                        // New tweet detected, proceed to post it to Bluesky
+                        const postContent = `${tweet.text}\n\n(mirrored from X)`;
                         console.log(
                             `New tweet found. Tweet ID: "${tweet.id}". Posting to Bluesky...`,
                         );
 
                         try {
-                            // Correct the post format for Bluesky
+                            // Post the tweet to Bluesky
                             await agent.post({
                                 $type: "app.bsky.feed.post", // Specify the type explicitly
                                 text: postContent, // Ensure text is correctly passed with the added content
@@ -191,18 +194,20 @@ async function main() {
                                 `Successfully posted tweet to Bluesky: "${postContent}"`,
                             );
 
-                            // Update the last posted tweet IDs
+                            // Add the newly posted tweet's hash to the lastTweetIds array
                             lastTweetIds.push(tweet.id);
-                            if (lastTweetIds.length > 3) {
-                                // Keep only the latest three tweet IDs to avoid storing too many
-                                lastTweetIds = lastTweetIds.slice(-3);
+
+                            // Keep only the latest HASH_LOG_SIZE tweet IDs to avoid storing too many
+                            if (lastTweetIds.length > HASH_LOG_SIZE) {
+                                lastTweetIds =
+                                    lastTweetIds.slice(-HASH_LOG_SIZE);
                             }
+
+                            // Save the updated last tweet hashes to the file
+                            saveLastTweetHashes(lastTweetIds);
                             console.log(
                                 `Updated lastTweetIds to: "${lastTweetIds}"`,
                             );
-
-                            // Save the last tweet IDs to the file
-                            saveLastTweetHashes(lastTweetIds);
                         } catch (error) {
                             console.error(
                                 "Error while posting to Bluesky:",
