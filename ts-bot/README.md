@@ -3,7 +3,7 @@
 This folder contains a starter template for creating a bot on Bluesky. In this example, the bot posts a smiley emoji on an automated schedule once every three hours.
 
 ## Set Up
-
+[![Open Val Town Template](https://stevekrouse-badge.web.val.run/?3)](https://www.val.town/x/charmaine/blueskyBotTutorial)
 1. Install Typescript: `npm i -g typescript`
 2. Install Node.js: `npm i -g ts-node`
 3. Make a copy of the example `.env` file by running: `cp example.env .env`. Set your username and password in `.env`. Use an App Password.
