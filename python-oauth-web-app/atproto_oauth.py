@@ -312,14 +312,12 @@ def refresh_token_request(
 def pds_dpop_jwt(
     method: str,
     url: str,
-    iss: str,
     access_token: str,
     nonce: str,
     dpop_private_jwk: JsonWebKey,
 ) -> str:
     dpop_pub_jwk = json.loads(dpop_private_jwk.as_json(is_private=False))
     body = {
-        "iss": iss,
         "iat": int(time.time()),
         "exp": int(time.time()) + 10,
         "jti": generate_token(),
@@ -350,7 +348,6 @@ def pds_authed_req(method: str, url: str, user: dict, db: Any, body=None) -> Any
         dpop_jwt = pds_dpop_jwt(
             "POST",
             url,
-            user["authserver_iss"],
             access_token,
             dpop_pds_nonce,
             dpop_private_jwk,
