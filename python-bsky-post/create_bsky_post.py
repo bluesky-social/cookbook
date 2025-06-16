@@ -353,7 +353,7 @@ def create_post(args):
 def main():
     parser = argparse.ArgumentParser(description="bsky.app post upload example script")
     parser.add_argument(
-        "--pds-url", default=os.environ.get("ATP_PDS_HOST") or "https://bsky.social"
+        "--pds-url", default=os.environ.get("ATP_PDS_HOST")
     )
     parser.add_argument("--handle", default=os.environ.get("ATP_AUTH_HANDLE"))
     parser.add_argument("--password", default=os.environ.get("ATP_AUTH_PASSWORD"))
@@ -365,6 +365,9 @@ def main():
     parser.add_argument("--embed-url")
     parser.add_argument("--embed-ref")
     args = parser.parse_args()
+    if not args.pds_url:
+        print("PDS host must be supplied", file=sys.stderr)
+        sys.exit(-1)
     if not (args.handle and args.password):
         print("both handle and password are required", file=sys.stderr)
         sys.exit(-1)
