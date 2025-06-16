@@ -8,12 +8,10 @@ import (
 	"path/filepath"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	_ "github.com/bluesky-social/indigo/api/bsky"
-	_ "github.com/bluesky-social/indigo/api/chat"
-	_ "github.com/bluesky-social/indigo/api/ozone"
+	"github.com/bluesky-social/indigo/atproto/data"
 	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/bluesky-social/indigo/atproto/repo"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/ipfs/go-cid"
 )
@@ -85,14 +83,13 @@ func carList(carPath string) error {
 	}
 
 	// read repository tree in to memory
-	r, err := repo.ReadRepoFromCar(ctx, fi)
+	c, r, err := repo.LoadRepoFromCAR(ctx, fi)
 	if err != nil {
 		return err
 	}
 
 	// extract DID from repo commit
-	sc := r.SignedCommit()
-	did, err := syntax.ParseDID(sc.Did)
+	did, err := syntax.ParseDID(c.DID)
 	if err != nil {
 		return err
 	}
@@ -100,8 +97,8 @@ func carList(carPath string) error {
 	fmt.Printf("=== %s ===\n", did)
 	fmt.Println("key\trecord_cid")
 
-	err = r.ForEach(ctx, "", func(k string, v cid.Cid) error {
-		fmt.Printf("%s\t%s\n", k, v.String())
+	err = r.MST.Walk(func(k []byte, v cid.Cid) error {
+		fmt.Printf("%s\t%s\n", string(k), v.String())
 		return nil
 	})
 	if err != nil {
@@ -117,14 +114,13 @@ func carUnpack(carPath string) error {
 		return err
 	}
 
-	r, err := repo.ReadRepoFromCar(ctx, fi)
+	c, r, err := repo.LoadRepoFromCAR(ctx, fi)
 	if err != nil {
 		return err
 	}
 
 	// extract DID from repo commit
-	sc := r.SignedCommit()
-	did, err := syntax.ParseDID(sc.Did)
+	did, err := syntax.ParseDID(c.DID)
 	if err != nil {
 		return err
 	}
@@ -135,7 +131,7 @@ func carUnpack(carPath string) error {
 	// first the commit object as a meta file
 	commitPath := topDir + "/_commit"
 	os.MkdirAll(filepath.Dir(commitPath), os.ModePerm)
-	recJson, err := json.MarshalIndent(sc, "", "  ")
+	recJson, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -144,13 +140,22 @@ func carUnpack(carPath string) error {
 	}
 
 	// then all the actual records
-	err = r.ForEach(ctx, "", func(k string, v cid.Cid) error {
-		_, rec, err := r.GetRecord(ctx, k)
+	err = r.MST.Walk(func(k []byte, v cid.Cid) error {
+		col, rkey, err := syntax.ParseRepoPath(string(k))
+		if err != nil {
+			return err
+		}
+		recBytes, _, err := r.GetRecordBytes(ctx, col, rkey)
 		if err != nil {
 			return err
 		}
 
-		recPath := topDir + "/" + k
+		rec, err := data.UnmarshalCBOR(recBytes)
+		if err != nil {
+			return err
+		}
+
+		recPath := topDir + "/" + string(k)
 		fmt.Printf("%s.json\n", recPath)
 		os.MkdirAll(filepath.Dir(recPath), os.ModePerm)
 		if err != nil {
