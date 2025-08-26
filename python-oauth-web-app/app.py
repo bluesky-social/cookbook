@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import functools
+import regex
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 from flask import (
@@ -170,6 +171,14 @@ def oauth_login():
 
     # Login can start with a handle, DID, or auth server URL. We are calling whatever the user supplied the "username".
     username = request.form["username"]
+
+    # strip unicode control/formatting codepoints (common in copy-pasted handles)
+    username = regex.sub(r"[\p{C}]", "", username)
+
+    # strip @ prefix, if present
+    if is_valid_handle(username.removeprefix("@")):
+        username = username.removeprefix("@")
+
     if is_valid_handle(username) or is_valid_did(username):
         # If starting with an account identifier, resolve the identity (bi-directionally), fetch the PDS URL, and resolve to the Authorization Server URL
         login_hint = username
@@ -192,7 +201,8 @@ def oauth_login():
         try:
             authserver_url = resolve_pds_authserver(initial_url)
         except Exception:
-            authserver_url = initial_url
+            # If initial_url is an AS url, strip any trailing slashes
+            authserver_url = initial_url.rstrip("/")
     else:
         flash("Not a valid handle, DID, or auth server URL", "error")
         return render_template("login.html"), 400
