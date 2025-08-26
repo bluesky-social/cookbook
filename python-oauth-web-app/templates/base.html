@@ -30,8 +30,12 @@
 </header>
 <main>
   <section class="content">
-    {% for message in get_flashed_messages() %}
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+      {% if category == "error" %}
+      <article style="background-color: #861D13;">{{ message }}</article>
+      {% else %}
       <article>{{ message }}</article>
+      {% endif %}
     {% endfor %}
     {% block content %}{% endblock %}
   </section>

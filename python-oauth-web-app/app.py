@@ -167,7 +167,13 @@ def oauth_login():
     if is_valid_handle(username) or is_valid_did(username):
         # If starting with an account identifier, resolve the identity (bi-directionally), fetch the PDS URL, and resolve to the Authorization Server URL
         login_hint = username
-        did, handle, did_doc = resolve_identity(username)
+
+        try:
+            did, handle, did_doc = resolve_identity(username)
+        except Exception as e:
+            flash(f"Failed to resolve identity: {e}", "error")
+            return render_template("login.html"), 400
+
         pds_url = pds_endpoint(did_doc)
         print(f"account PDS: {pds_url}")
         authserver_url = resolve_pds_authserver(pds_url)
@@ -182,7 +188,7 @@ def oauth_login():
         except Exception:
             authserver_url = initial_url
     else:
-        flash("Not a valid handle, DID, or auth server URL")
+        flash("Not a valid handle, DID, or auth server URL", "error")
         return render_template("login.html"), 400
 
     # Fetch Auth Server metadata. For a self-hosted PDS, this will be the same server (the PDS). For large-scale PDS hosts like Bluesky, this may be a separate "entryway" server filling the Auth Server role.
@@ -194,7 +200,7 @@ def oauth_login():
     except Exception as err:
         print(f"failed to fetch auth server metadata: {err}")
         # raise err
-        flash("Failed to fetch Auth Server (Entryway) OAuth metadata")
+        flash("Failed to fetch Auth Server (Entryway) OAuth metadata", "error")
         return render_template("login.html"), 400
 
     # Generate DPoP private signing key for this account session. In theory this could be defered until the token request at the end of the athentication flow, but doing it now allows early binding during the PAR request.
