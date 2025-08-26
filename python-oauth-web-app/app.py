@@ -31,6 +31,7 @@ from atproto_oauth import (
     fetch_authserver_meta,
 )
 from atproto_security import is_safe_url
+from bsky_util import extract_facets
 
 app = Flask(__name__)
 
@@ -382,6 +383,7 @@ def bsky_post():
         "record": {
             "$type": "app.bsky.feed.post",
             "text": request.form["post_text"],
+            "facets": extract_facets(request.form["post_text"]),
             "createdAt": now,
         },
     }
