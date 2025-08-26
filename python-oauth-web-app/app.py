@@ -261,6 +261,11 @@ def oauth_login():
 # Endpoint for receiving "callback" responses from the Authorization Server, to complete the auth flow.
 @app.route("/oauth/callback")
 def oauth_callback():
+    if error := request.args.get("error"):
+        error_description = request.args.get("error_description", "")
+        flash(f"Authorization failed: {error}: {error_description}", "error")
+        return redirect("/oauth/login")
+
     state = request.args["state"]
     authserver_iss = request.args["iss"]
     authorization_code = request.args["code"]
