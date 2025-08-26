@@ -24,6 +24,7 @@ from atproto_identity import (
 )
 from atproto_oauth import (
     refresh_token_request,
+    revoke_token_request,
     pds_authed_req,
     resolve_pds_authserver,
     initial_token_request,
@@ -362,6 +363,14 @@ def oauth_refresh():
 @login_required
 @app.route("/oauth/logout")
 def oauth_logout():
+    app_url = request.url_root.replace("http://", "https://")
+
+    try:
+        revoke_token_request(g.user, app_url, CLIENT_SECRET_JWK)
+    except Exception as e:
+        print("Error during token revocation:", e)
+        # but still proceed to delete the session on our end
+
     query_db("DELETE FROM oauth_session WHERE did = ?;", [g.user["did"]])
     session.clear()
     return redirect("/")

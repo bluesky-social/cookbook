@@ -2,6 +2,7 @@ from urllib.parse import urlparse
 from typing import Any, Tuple
 import time
 import json
+from requests import Response
 from authlib.jose import JsonWebKey
 from authlib.common.security import generate_token
 from authlib.jose import jwt
@@ -108,6 +109,50 @@ def authserver_dpop_jwt(
     return dpop_proof
 
 
+# POST data to auth server with client assertion and DPoP, handling DPoP nonce rotation
+# Returns latest DPoP nonce and 'requests' response object (which may be an error response)
+def auth_server_post(
+    authserver_url: str,
+    client_id: str,
+    client_secret_jwk: JsonWebKey,
+    dpop_private_jwk: JsonWebKey,
+    dpop_authserver_nonce: str,
+    post_url: str,
+    post_data: dict
+) -> Tuple[str, Response]:
+    # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
+    client_assertion = client_assertion_jwt(
+        client_id, authserver_url, client_secret_jwk
+    )
+    post_data |= {
+        "client_id": client_id,
+        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+        "client_assertion": client_assertion,
+    }
+
+    # Create DPoP header JWT
+    dpop_proof = authserver_dpop_jwt(
+        "POST", post_url, dpop_authserver_nonce, dpop_private_jwk
+    )
+
+    # IMPORTANT: This method may be passed untrusted URLs as input, SSRF mitigations are needed
+    assert is_safe_url(post_url)
+    with hardened_http.get_session() as sess:
+        resp = sess.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
+
+    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
+    if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
+        dpop_authserver_nonce = resp.headers["DPoP-Nonce"]
+        print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
+        # print(server_nonce)
+        dpop_proof = authserver_dpop_jwt(
+            "POST", post_url, dpop_authserver_nonce, dpop_private_jwk
+        )
+        with hardened_http.get_session() as sess:
+            resp = sess.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
+
+    return dpop_authserver_nonce, resp
+
 # Prepares and sends a pushed auth request (PAR) via HTTP POST to the Authorization Server.
 # Returns "state" id HTTP response on success, without checking HTTP response status
 def send_par_auth_request(
@@ -128,27 +173,13 @@ def send_par_auth_request(
     code_challenge = create_s256_code_challenge(pkce_verifier)
     code_challenge_method = "S256"
 
-    # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
-    client_assertion = client_assertion_jwt(
-        client_id, authserver_url, client_secret_jwk
-    )
-
-    # Create DPoP header JWT; we don't have a server Nonce yet
-    dpop_authserver_nonce = ""
-    dpop_proof = authserver_dpop_jwt(
-        "POST", par_url, dpop_authserver_nonce, dpop_private_jwk
-    )
-
     par_body = {
         "response_type": "code",
         "code_challenge": code_challenge,
         "code_challenge_method": code_challenge_method,
-        "client_id": client_id,
         "state": state,
         "redirect_uri": redirect_uri,
         "scope": scope,
-        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        "client_assertion": client_assertion,
     }
     if login_hint:
         par_body["login_hint"] = login_hint
@@ -156,32 +187,15 @@ def send_par_auth_request(
 
     # IMPORTANT: Pushed Authorization Request URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(par_url)
-    with hardened_http.get_session() as sess:
-        resp = sess.post(
-            par_url,
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "DPoP": dpop_proof,
-            },
-            data=par_body,
-        )
-
-    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
-    if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
-        dpop_authserver_nonce = resp.headers["DPoP-Nonce"]
-        print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
-        dpop_proof = authserver_dpop_jwt(
-            "POST", par_url, dpop_authserver_nonce, dpop_private_jwk
-        )
-        with hardened_http.get_session() as sess:
-            resp = sess.post(
-                par_url,
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "DPoP": dpop_proof,
-                },
-                data=par_body,
-            )
+    dpop_authserver_nonce, resp = auth_server_post(
+        authserver_url=authserver_url,
+        client_id=client_id,
+        client_secret_jwk=client_secret_jwk,
+        dpop_private_jwk=dpop_private_jwk,
+        dpop_authserver_nonce="",  # not yet known
+        post_url=par_url,
+        post_data=par_body
+    )
 
     return pkce_verifier, state, dpop_authserver_nonce, resp
 
@@ -203,46 +217,29 @@ def initial_token_request(
     client_id = f"{app_url}oauth/client-metadata.json"
     redirect_uri = f"{app_url}oauth/callback"
 
-    # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
-    client_assertion = client_assertion_jwt(
-        client_id, authserver_url, client_secret_jwk
-    )
-
     params = {
-        "client_id": client_id,
         "redirect_uri": redirect_uri,
         "grant_type": "authorization_code",
         "code": code,
-        "code_verifier": auth_request["pkce_verifier"],
-        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        "client_assertion": client_assertion,
+        "code_verifier": auth_request["pkce_verifier"]
     }
 
-    # Create DPoP header JWT, using the existing DPoP signing key for this account/session
     token_url = authserver_meta["token_endpoint"]
     dpop_private_jwk = JsonWebKey.import_key(
         json.loads(auth_request["dpop_private_jwk"])
     )
-    dpop_authserver_nonce = auth_request["dpop_authserver_nonce"]
-    dpop_proof = authserver_dpop_jwt(
-        "POST", token_url, dpop_authserver_nonce, dpop_private_jwk
-    )
 
     # IMPORTANT: Token URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(token_url)
-    with hardened_http.get_session() as sess:
-        resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
-
-    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
-    if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
-        dpop_authserver_nonce = resp.headers["DPoP-Nonce"]
-        print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
-        # print(server_nonce)
-        dpop_proof = authserver_dpop_jwt(
-            "POST", token_url, dpop_authserver_nonce, dpop_private_jwk
-        )
-        with hardened_http.get_session() as sess:
-            resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
+    dpop_authserver_nonce, resp = dpop_authserver_nonce, resp = auth_server_post(
+        authserver_url=authserver_url,
+        client_id=client_id,
+        client_secret_jwk=client_secret_jwk,
+        dpop_private_jwk=dpop_private_jwk,
+        dpop_authserver_nonce=auth_request["dpop_authserver_nonce"],
+        post_url=token_url,
+        post_data=params
+    )
 
     resp.raise_for_status()
     token_body = resp.json()
@@ -266,42 +263,27 @@ def refresh_token_request(
     # Construct token request fields
     client_id = f"{app_url}oauth/client-metadata.json"
 
-    # Self-signed JWT using the private key declared in client metadata JWKS (confidential client)
-    client_assertion = client_assertion_jwt(
-        client_id, authserver_url, client_secret_jwk
-    )
-
     params = {
-        "client_id": client_id,
         "grant_type": "refresh_token",
-        "refresh_token": user["refresh_token"],
-        "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
-        "client_assertion": client_assertion,
+        "refresh_token": user["refresh_token"]
     }
 
-    # Create DPoP header JWT, using the existing DPoP signing key for this account/session
+    # Retrieve the existing DPoP signing key for this account/session
     token_url = authserver_meta["token_endpoint"]
     dpop_private_jwk = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
     dpop_authserver_nonce = user["dpop_authserver_nonce"]
-    dpop_proof = authserver_dpop_jwt(
-        "POST", token_url, dpop_authserver_nonce, dpop_private_jwk
-    )
 
     # IMPORTANT: Token URL is untrusted input, SSRF mitigations are needed
     assert is_safe_url(token_url)
-    with hardened_http.get_session() as sess:
-        resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
-
-    # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
-    if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
-        dpop_authserver_nonce = resp.headers["DPoP-Nonce"]
-        print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
-        # print(server_nonce)
-        dpop_proof = authserver_dpop_jwt(
-            "POST", token_url, dpop_authserver_nonce, dpop_private_jwk
-        )
-        with hardened_http.get_session() as sess:
-            resp = sess.post(token_url, data=params, headers={"DPoP": dpop_proof})
+    dpop_authserver_nonce, resp = dpop_authserver_nonce, resp = auth_server_post(
+        authserver_url=authserver_url,
+        client_id=client_id,
+        client_secret_jwk=client_secret_jwk,
+        dpop_private_jwk=dpop_private_jwk,
+        dpop_authserver_nonce=dpop_authserver_nonce,
+        post_url=token_url,
+        post_data=params
+    )
 
     if resp.status_code not in [200, 201]:
         print(f"Token Refresh Error: {resp.json()}")
@@ -310,6 +292,46 @@ def refresh_token_request(
     token_body = resp.json()
 
     return token_body, dpop_authserver_nonce
+
+
+def revoke_token_request(
+    user: dict,
+    app_url: str,
+    client_secret_jwk: JsonWebKey,
+):
+    authserver_url = user["authserver_iss"]
+
+    # Re-fetch server metadata
+    authserver_meta = fetch_authserver_meta(authserver_url)
+
+    # Retrieve the existing DPoP signing key for this account/session
+    client_id = f"{app_url}oauth/client-metadata.json"
+    dpop_private_jwk = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
+    dpop_authserver_nonce = user["dpop_authserver_nonce"]
+
+    # Revocation may not be supported by all ASes
+    revoke_url = authserver_meta.get("revocation_endpoint")
+    if not revoke_url:
+        print("revocation_endpoint not in authserver_meta, doing nothing")
+        return
+
+    # IMPORTANT: Revocation URL is untrusted input, SSRF mitigations are needed
+    assert is_safe_url(revoke_url)
+    for token_type in ["access_token", "refresh_token"]:
+        dpop_authserver_nonce, resp = dpop_authserver_nonce, resp = auth_server_post(
+            authserver_url=authserver_url,
+            client_id=client_id,
+            client_secret_jwk=client_secret_jwk,
+            dpop_private_jwk=dpop_private_jwk,
+            dpop_authserver_nonce=dpop_authserver_nonce,
+            post_url=revoke_url,
+            post_data={
+                "token": user[token_type],
+                "token_type_hint": token_type
+            }
+        )
+
+        resp.raise_for_status()
 
 
 def pds_dpop_jwt(
