@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="referrer" content="origin-when-cross-origin">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.purple.min.css">
+	<style>
+		code {
+			/* fsr pico sets this to inline-block? */
+			display: inline;
+		}
+	</style>
+	<title>atproto OAuth Browser Client Example</title>
+	<script type="importmap">
+	{
+		"imports": {
+			"@atproto/oauth-client-browser": "https://esm.sh/@atproto/oauth-client-browser@0.3.29",
+			"@atproto/api": "https://esm.sh/@atproto/api@0.16.4"
+		}
+	}
+	</script>
+</head>
+<body>
+	<main>
+		<section class="content">
+			<header>
+				<hgroup>
+					<h1>atproto OAuth Browser Client Example</h1>
+				</hgroup>
+				<nav>
+					<ul>
+						<li><a href="https://github.com/bluesky-social/cookbook">Code</a></li>
+					</ul>
+				</nav>
+			</header>
+
+			<article id="loading-spinner">
+				<h3 aria-busy="true">Loading session...</h3>
+			</article>
+
+			<!-- hidden by default, will be shown if an existing session cannot be resumed -->
+			<article id="login-container" style="max-width: 32em; display: none;">
+				<h3>Login with AT Protocol</h3>
+				<form id="login-form">
+					<p>Enter your handle to continue</p>
+					<fieldset role="group">
+						<input name="username" id="username" placeholder="handle.example.com" style="font-family: monospace,monospace;" required>
+						<button id="login-button">Login</button>
+					</fieldset>
+				</form>
+				<details>
+					<summary><u>What's my handle?</u></summary>
+					<p>If you're a Bluesky user, you already have an AT Protocol handle - it's what comes after the <code style="display: inline;">@</code> sign when people mention you. You can see your handle on your Bluesky profile page.</p>
+					<p>You can create an AT Protocol account via Bluesky, but <a href="https://atproto.com/guides/self-hosting">other options</a> are available.</p>
+					<p><button id="bsky-button">Create Account with Bluesky Social</button></p>
+					<p>You may alternatively enter your DID, PDS URL, or entryway URL (eg, <code>https://pds.example.com</code>).</p>
+					</ul>
+				</details>
+			</article>
+
+			<!-- hidden by default, will be shown if a login session has been established -->
+			<article id="post-container" style="display: none;">
+				<p>Welcome, <code id="welcome-message"></code></p>
+				<h3>Compose Post</h3>
+				<form id="post-form">
+					<textarea name="post_text" placeholder="What's up?" id="post-text" required autofocus>I'm testing the Vanilla JS #ExampleOAuthClient</textarea>
+					<button id="post-button">Poast!</button>
+				</form>
+			</article>
+
+			<!-- hidden by default, will be shown if a post has been created -->
+			<article id="success-container" style="display: none;">
+				<h2>Success!</h2>
+				<p>The post record has been created on your PDS. It should be visible at:</p>
+				<ul>
+					<li>Your PDS's <a id="success-pds" href="#"><code>com.atproto.repo.getRecord</code> API</a></li>
+					<li><a id="success-bsky" href="#">The Bluesky web app</a></li>
+					<li>Independent Bluesky apps like <a id="success-zeppelin" href="#">Zeppelin</a></li>
+					<li>The <a id="success-pdsls" href="#">PDSls</a> AT Protocol Explorer tool</li>
+					<li>...and many other places that speak AT Protocol!</li>
+				</ul>
+			</article>
+
+		</section>
+	</main>
+
+	<script type="module" src="./main.js"></script>
+</body>
+</html>
