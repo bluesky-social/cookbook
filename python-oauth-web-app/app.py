@@ -31,6 +31,7 @@ from atproto_oauth import (
     fetch_authserver_meta,
 )
 from atproto_security import is_safe_url
+from atproto_util import parse_full_aturi
 from bsky_util import extract_facets
 
 app = Flask(__name__)
@@ -392,8 +393,16 @@ def bsky_post():
         print(f"PDS HTTP Error: {resp.json()}")
     resp.raise_for_status()
 
-    flash("Post record created in PDS!")
-    return render_template("bsky_post.html")
+    at_uri = resp.json()["uri"]
+    record_repo, _, record_rkey = parse_full_aturi(at_uri)
+
+    return render_template(
+        "bsky_post_success.html",
+        repo=record_repo,
+        rkey=record_rkey,
+        pds_url=pds_url,
+        at_uri=at_uri
+    )
 
 
 @app.errorhandler(500)
