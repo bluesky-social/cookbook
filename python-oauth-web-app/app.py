@@ -46,6 +46,9 @@ CLIENT_PUB_JWK = json.loads(CLIENT_SECRET_JWK.as_json(is_private=False))
 # Defensively check that the public JWK is really public and didn't somehow end up with secret cryptographic key info
 assert "d" not in CLIENT_PUB_JWK
 
+# OAuth scopes requested by this app (goes in the client metadata, and authorization requests)
+OAUTH_SCOPE = "atproto repo:app.bsky.feed.post?action=create"
+
 
 # Helpers for managing database connection.
 # Note that you could use a sqlite ":memory:" database instead. In that case you would want to have a global sqlite connection, instead of re-connecting per connection. This file-based setup is following the Flask docs/tutorial.
@@ -136,7 +139,7 @@ def oauth_client_metadata():
             "redirect_uris": [f"{app_url}oauth/callback"],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
-            "scope": "atproto transition:generic",
+            "scope": OAUTH_SCOPE,
             "token_endpoint_auth_method": "private_key_jwt",
             "token_endpoint_auth_signing_alg": "ES256",
             # NOTE: in theory we can return the public key (in JWK format) inline
@@ -209,9 +212,6 @@ def oauth_login():
     # Generate DPoP private signing key for this account session. In theory this could be defered until the token request at the end of the athentication flow, but doing it now allows early binding during the PAR request.
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
 
-    # OAuth scopes requested by this app
-    scope = "atproto transition:generic"
-
     # Dynamically compute our "client_id" based on the request HTTP Host
     app_url = request.url_root.replace("http://", "https://")
     redirect_uri = f"{app_url}oauth/callback"
@@ -224,7 +224,7 @@ def oauth_login():
         login_hint,
         client_id,
         redirect_uri,
-        scope,
+        OAUTH_SCOPE,
         CLIENT_SECRET_JWK,
         dpop_private_jwk,
     )
@@ -244,7 +244,7 @@ def oauth_login():
             handle,  # might be None
             pds_url,  # might be None
             pkce_verifier,
-            scope,
+            OAUTH_SCOPE,
             dpop_authserver_nonce,
             dpop_private_jwk.as_json(is_private=True),
         ],
