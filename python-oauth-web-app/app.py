@@ -126,10 +126,10 @@ def homepage():
 
 # Every atproto OAuth client must have a public client metadata JSON document. It does not need to be at this specific path. The full URL to this file is the "client_id" of the app.
 # This implementation dynamically uses the HTTP request Host name to infer the "client_id".
-@app.route("/oauth/client-metadata.json")
+@app.route("/oauth-client-metadata.json")
 def oauth_client_metadata():
     app_url = request.url_root.replace("http://", "https://")
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
 
     return jsonify(
         {
@@ -225,7 +225,7 @@ def oauth_login():
     # Dynamically compute our "client_id" based on the request HTTP Host
     app_url = request.url_root.replace("http://", "https://")
     redirect_uri = f"{app_url}oauth/callback"
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
 
     # Submit OAuth Pushed Authentication Request (PAR). We could have constructed a more complex authentication request URL below instead, but there are some advantages with PAR, including failing fast, early DPoP binding, and no URL length limitations.
     pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(

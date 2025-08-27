@@ -214,7 +214,7 @@ def initial_token_request(
     authserver_meta = fetch_authserver_meta(authserver_url)
 
     # Construct auth token request fields
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
     redirect_uri = f"{app_url}oauth/callback"
 
     params = {
@@ -261,7 +261,7 @@ def refresh_token_request(
     authserver_meta = fetch_authserver_meta(authserver_url)
 
     # Construct token request fields
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
 
     params = {
         "grant_type": "refresh_token",
@@ -305,7 +305,7 @@ def revoke_token_request(
     authserver_meta = fetch_authserver_meta(authserver_url)
 
     # Retrieve the existing DPoP signing key for this account/session
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
     dpop_private_jwk = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
     dpop_authserver_nonce = user["dpop_authserver_nonce"]
 
