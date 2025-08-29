@@ -38,6 +38,8 @@
 
 			<article id="loading-spinner">
 				<h3 aria-busy="true">Loading session...</h3>
+				<article id="loading-error" style="display: none; background-color: #861D13;">
+				</article>
 			</article>
 
 			<!-- hidden by default, will be shown if an existing session cannot be resumed -->
@@ -58,6 +60,7 @@
 					<p>You may alternatively enter your DID, PDS URL, or entryway URL (eg, <code>https://pds.example.com</code>).</p>
 					</ul>
 				</details>
+				<p id="login-form-error" style="color: #E37474;"></p>
 			</article>
 
 			<!-- hidden by default, will be shown if a login session has been established -->
@@ -68,6 +71,8 @@
 					<textarea name="post_text" placeholder="What's up?" id="post-text" required autofocus>I'm testing the Vanilla JS #ExampleOAuthClient</textarea>
 					<button id="post-button">Poast!</button>
 				</form>
+				<br>
+				<p id="post-form-error" style="color: #E37474;"></p>
 			</article>
 
 			<!-- hidden by default, will be shown if a post has been created -->

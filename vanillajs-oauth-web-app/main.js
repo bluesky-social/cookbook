@@ -33,34 +33,40 @@ async function init() {
 	}
 
 	/* Set up the OAuth client */
-	oac = await BrowserOAuthClient.load({
-		clientId,
-		handleResolver: 'https://bsky.social',
-	});
-	const result = await oac.init();
+	try {
+		oac = await BrowserOAuthClient.load({
+			clientId,
+			handleResolver: 'https://bsky.social',
+		});
+		const result = await oac.init();
 
-	if (result) {
-		const { session, state } = result
-		if (state != null) {
-			console.log(`${session.sub} was successfully authenticated (state: ${state})`)
-		} else {
-			console.log(`${session.sub} was restored (last active session)`)
+		if (result) {
+			const { session, state } = result
+			if (state != null) {
+				console.log(`${session.sub} was successfully authenticated (state: ${state})`)
+			} else {
+				console.log(`${session.sub} was restored (last active session)`)
+			}
+
+			agent = new Agent(session);
+
+			const res = await agent.com.atproto.server.getSession();
+			if (!res.success) {
+				console.log("getSession failed", res);
+				throw new Error(JSON.stringify(res));
+			}
+
+			document.getElementById("welcome-message").innerText = `@${res.data.handle}`;
+			document.getElementById("post-container").style.display = "inherit"; // unhide
+			document.getElementById("logout-nav").style.display = "inherit"; // unhide
+		} else { // there is no existing session
+			document.getElementById("login-container").style.display = "inherit"; // unhide
 		}
-
-		agent = new Agent(session);
-		window.agentDebug = agent; // TODO: remove this
-
-		const res = await agent.com.atproto.server.getSession();
-		if (!res.success) {
-			console.log("getSession failed", res);
-			return; // TODO: surface error to user!
-		}
-
-		document.getElementById("welcome-message").innerText = `@${res.data.handle}`;
-		document.getElementById("post-container").style.display = "inherit"; // unhide
-		document.getElementById("logout-nav").style.display = "inherit"; // unhide
-	} else { // there is no existing session
-		document.getElementById("login-container").style.display = "inherit"; // unhide
+	} catch (error) {
+		const msg = `An error occured: ${error}`;
+		document.getElementById("loading-error").innerText = msg;
+		document.getElementById("loading-error").style.display = "inherit"; // unhide
+		return;
 	}
 
 	document.getElementById("loading-spinner").style.display = "none";
@@ -75,9 +81,9 @@ async function doLogin(identifier) {
 			state: 'some value needed later',
 			signal: new AbortController().signal, // Optional, allows to cancel the sign in (and destroy the pending authorization, for better security)
 		})
-		console.log('Never executed')
+		console.log('Never executed');
 	} catch (err) {
-		console.log('The user aborted the authorization process by navigating "back"')
+		document.getElementById("login-form-error").innerText = `Login error: ${err}`;
 	}
 	loginButton.removeAttribute("aria-busy");
 }
@@ -89,24 +95,31 @@ async function doPost(message) {
 	const rt = new RichText({text: message});
 	await rt.detectFacets(agent);
 
-	const res = await agent.com.atproto.repo.createRecord({
-		repo: agent.did,
-		collection: 'app.bsky.feed.post',
-		record: {
-			$type: 'app.bsky.feed.post',
-			text: message,
-			facets: rt.facets,
-			createdAt: new Date().toISOString(),
-		},
-	});
+	let res;
+	try {
+		res = await agent.com.atproto.repo.createRecord({
+			repo: agent.did,
+			collection: 'app.bsky.feed.post',
+			record: {
+				$type: 'app.bsky.feed.post',
+				text: message,
+				facets: rt.facets,
+				createdAt: new Date().toISOString(),
+			},
+		});
 
-	if (!res.success) {
-		// TODO: something!
+		if (!res.success) {
+			throw new Error(JSON.stringify(res));
+		}
+	} catch (err) {
+		document.getElementById("post-form-error").innerText = `${err}`;
+		postButton.removeAttribute("aria-busy");
+		return;
 	}
 
 	const atUri = res.data.uri;
 	const [uriRepo, uriCollection, uriRkey] = atUri.split('/').slice(2);
-	const pdsHost = (await window.agentDebug.sessionManager.getTokenInfo()).aud; // XXX: is this really the best way?
+	const pdsHost = (await agent.sessionManager.getTokenInfo()).aud; // XXX: is this really the best way?
 
 	console.log(res);
 
