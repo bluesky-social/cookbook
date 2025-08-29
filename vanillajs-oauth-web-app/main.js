@@ -27,6 +27,11 @@ async function init() {
 		doPost(document.getElementById("post-text").value);
 	}
 
+	document.getElementById("logout-nav").onclick = function() {
+		oac.revoke(agent.did);
+		window.location.reload();
+	}
+
 	/* Set up the OAuth client */
 	oac = await BrowserOAuthClient.load({
 		clientId,
@@ -53,6 +58,7 @@ async function init() {
 
 		document.getElementById("welcome-message").innerText = `@${res.data.handle}`;
 		document.getElementById("post-container").style.display = "inherit"; // unhide
+		document.getElementById("logout-nav").style.display = "inherit"; // unhide
 	} else { // there is no existing session
 		document.getElementById("login-container").style.display = "inherit"; // unhide
 	}
@@ -108,7 +114,7 @@ async function doPost(message) {
 	postButton.removeAttribute("aria-busy");
 	document.getElementById("post-container").style.display = "none";
 
-	// show the "success" screen"
+	// show the "success" screen
 	document.getElementById("success-pds").href = `${pdsHost}xrpc/com.atproto.repo.getRecord?repo=${uriRepo}&collection=app.bsky.feed.post&rkey=${uriRkey}`;
 	document.getElementById("success-bsky").href = `https://bsky.app/profile/${uriRepo}/post/${uriRkey}`;
 	document.getElementById("success-zeppelin").href = `https://zeppelin.social/profile/${uriRepo}/post/${uriRkey}`;
