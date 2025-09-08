@@ -1,15 +1,21 @@
 import { BrowserOAuthClient } from '@atproto/oauth-client-browser'
 import { Agent, RichText } from '@atproto/api'
 
-const OAUTH_SCOPE = "atproto repo:app.bsky.feed.post?action=create"
-
-const clientId = `http://localhost?${new URLSearchParams({
-	scope: OAUTH_SCOPE,
-	redirect_uri: Object.assign(new URL(window.location.origin), { hostname: '127.0.0.1' }).href,
-})}`
+function buildClientID() {
+	const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+	if (isLocal) {
+		// see https://atproto.com/specs/oauth#localhost-client-development
+		return `http://localhost?${new URLSearchParams({
+			scope: "atproto repo:app.bsky.feed.post?action=create",
+			redirect_uri: Object.assign(new URL(window.location.origin), { hostname: '127.0.0.1' }).href,
+		})}`
+	}
+	return `https://${window.location.host}/oauth-client-metadata.json`
+}
+const clientId = buildClientID();
 
 let oac; // undefined | BrowserOAuthClient
-let agent; // undefined | Agent
+let agent; // undefined | Agent   (gets assigned after successful auth)
 
 async function init() {
 	/* Set up form/button handlers */
@@ -135,7 +141,4 @@ async function doPost(message) {
 	document.getElementById("success-container").style.display = "inherit"; // unhide
 }
 
-console.log("hello");
-
-// is this the right time to init?
 document.addEventListener('DOMContentLoaded', init);
