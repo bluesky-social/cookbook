@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 
@@ -109,7 +110,16 @@ func runServer(cctx *cli.Context) error {
 		slog.Info("configuring confidential OAuth client")
 	}
 
-	oauthClient := oauth.NewClientApp(&config, NewSqliteStore("oauth_sessions.sqlite3"))
+	store, err := NewSqliteStore(&SqliteStoreConfig{
+		DatabasePath:              "oauth_sessions.sqlite3",
+		SessionExpiryDuration:     time.Hour * 24 * 90,
+		SessionInactivityDuration: time.Hour * 24 * 14,
+		AuthRequestExpiryDuration: time.Minute * 30,
+	})
+	if err != nil {
+		return err
+	}
+	oauthClient := oauth.NewClientApp(&config, store)
 
 	srv := Server{
 		CookieStore: sessions.NewCookieStore([]byte(cctx.String("session-secret"))),
