@@ -52,6 +52,18 @@ func NewSqliteStore(cfg *SqliteStoreConfig) (*SqliteStore, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("missing cfg")
 	}
+	if cfg.DatabasePath == "" {
+		return nil, fmt.Errorf("missing DatabasePath")
+	}
+	if cfg.SessionExpiryDuration == 0 {
+		return nil, fmt.Errorf("missing SessionExpiryDuration")
+	}
+	if cfg.SessionInactivityDuration == 0 {
+		return nil, fmt.Errorf("missing SessionInactivityDuration")
+	}
+	if cfg.AuthRequestExpiryDuration == 0 {
+		return nil, fmt.Errorf("missing AuthRequestExpiryDuration")
+	}
 
 	db, err := gorm.Open(sqlite.Open(cfg.DatabasePath), &gorm.Config{})
 	if err != nil {
@@ -70,7 +82,7 @@ func (m *SqliteStore) GetSession(ctx context.Context, did syntax.DID, sessionID 
 	inactive_threshold := time.Now().Add(-m.cfg.SessionInactivityDuration)
 	m.db.WithContext(ctx).Where(
 		"created_at < ? OR updated_at < ?", expiry_threshold, inactive_threshold,
-	).Delete(&storedAuthRequest{})
+	).Delete(&storedSessionData{})
 
 	// finally, the query itself
 	var row storedSessionData
