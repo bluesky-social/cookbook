@@ -109,7 +109,7 @@ func runServer(cctx *cli.Context) error {
 		slog.Info("configuring confidential OAuth client")
 	}
 
-	oauthClient := oauth.NewClientApp(&config, oauth.NewMemStore())
+	oauthClient := oauth.NewClientApp(&config, NewSqliteStore("oauth_sessions.sqlite3"))
 
 	srv := Server{
 		CookieStore: sessions.NewCookieStore([]byte(cctx.String("session-secret"))),
