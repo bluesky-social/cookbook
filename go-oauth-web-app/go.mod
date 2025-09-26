@@ -3,7 +3,7 @@ module github.com/bluesky-social/cookbook/go-oauth-web-app
 go 1.24.4
 
 require (
-	github.com/bluesky-social/indigo v0.0.0-20250924132341-b4dd6383c76f
+	github.com/bluesky-social/indigo v0.0.0-20250926122318-7bec8976937c
 	github.com/gorilla/sessions v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/urfave/cli/v2 v2.27.7
