@@ -101,7 +101,7 @@ func runServer(cctx *cli.Context) error {
 		slog.Info("configuring localhost OAuth client", "CallbackURL", config.CallbackURL)
 	} else {
 		config = oauth.NewPublicConfig(
-			fmt.Sprintf("https://%s/oauth/client-metadata.json", hostname),
+			fmt.Sprintf("https://%s/oauth-client-metadata.json", hostname),
 			fmt.Sprintf("https://%s/oauth/callback", hostname),
 			scopes,
 		)
@@ -137,7 +137,7 @@ func runServer(cctx *cli.Context) error {
 	}
 
 	http.HandleFunc("GET /", srv.Homepage)
-	http.HandleFunc("GET /oauth/client-metadata.json", srv.ClientMetadata)
+	http.HandleFunc("GET /oauth-client-metadata.json", srv.ClientMetadata)
 	http.HandleFunc("GET /oauth/jwks.json", srv.JWKS)
 	http.HandleFunc("GET /oauth/login", srv.OAuthLogin)
 	http.HandleFunc("POST /oauth/login", srv.OAuthLogin)
