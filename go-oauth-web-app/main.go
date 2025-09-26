@@ -62,6 +62,11 @@ type Server struct {
 	OAuth       *oauth.ClientApp
 }
 
+type TmplData struct {
+	DID   *syntax.DID
+	Error string
+}
+
 //go:embed "base.html"
 var tmplBaseText string
 
@@ -76,6 +81,10 @@ var tmplLogin = template.Must(template.Must(template.New("login.html").Parse(tmp
 //go:embed "post.html"
 var tmplPostText string
 var tmplPost = template.Must(template.Must(template.New("post.html").Parse(tmplBaseText)).Parse(tmplPostText))
+
+//go:embed "error.html"
+var tmplErrorText string
+var tmplError = template.Must(template.Must(template.New("error.html").Parse(tmplBaseText)).Parse(tmplErrorText))
 
 func runServer(cctx *cli.Context) error {
 
@@ -215,7 +224,7 @@ func (s *Server) Homepage(w http.ResponseWriter, r *http.Request) {
 		tmplHome.Execute(w, nil)
 		return
 	}
-	tmplHome.Execute(w, did)
+	tmplHome.Execute(w, TmplData{DID: did})
 }
 
 func (s *Server) OAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -237,12 +246,13 @@ func (s *Server) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	redirectURL, err := s.OAuth.StartAuthFlow(ctx, username)
 	if err != nil {
-		http.Error(w, fmt.Errorf("OAuth login failed: %w", err).Error(), http.StatusBadRequest)
+		var oauthErr = fmt.Errorf("OAuth login failed: %w", err).Error()
+		slog.Error(oauthErr)
+		tmplLogin.Execute(w, TmplData{Error: oauthErr})
 		return
 	}
 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
-	return
 }
 
 func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -253,7 +263,9 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	sessData, err := s.OAuth.ProcessCallback(ctx, r.URL.Query())
 	if err != nil {
-		http.Error(w, fmt.Errorf("processing OAuth callback: %w", err).Error(), http.StatusBadRequest)
+		var callbackErr = fmt.Errorf("failed processing oauth callback: %w", err).Error()
+		slog.Error(callbackErr)
+		tmplError.Execute(w, TmplData{Error: callbackErr})
 		return
 	}
 
@@ -332,7 +344,7 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "POST" {
-		tmplPost.Execute(w, did)
+		tmplPost.Execute(w, TmplData{DID: did})
 		return
 	}
 

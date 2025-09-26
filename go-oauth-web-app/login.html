@@ -9,5 +9,10 @@
       <input type="submit" value="Login">
     </fieldset>
   </form>
+  {{if .Error}}
+  <article style="background-color: #861D13;">
+    {{.Error}}
+  </article>
+  {{end}}
 </article>
 {{ end }}

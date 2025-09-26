@@ -15,8 +15,8 @@
   </hgroup>
   <nav>
     <ul>
-    {{ if . }}
-      <li><span style="font-family: monospace; font-weight: bold;">{{ . }}</span>
+    {{ if .DID }}
+      <li><span style="font-family: monospace; font-weight: bold;">{{ .DID }}</span>
       <li><a href="/bsky/post">Create Post</a>
       <li><a href="/oauth/refresh">Refresh Tokens</a>
       <li><a href="/oauth/logout">Logout</a>
