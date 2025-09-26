@@ -142,7 +142,6 @@ func runServer(cctx *cli.Context) error {
 	http.HandleFunc("GET /oauth/login", srv.OAuthLogin)
 	http.HandleFunc("POST /oauth/login", srv.OAuthLogin)
 	http.HandleFunc("GET /oauth/callback", srv.OAuthCallback)
-	http.HandleFunc("GET /oauth/refresh", srv.OAuthRefresh)
 	http.HandleFunc("GET /oauth/logout", srv.OAuthLogout)
 	http.HandleFunc("GET /bsky/post", srv.Post)
 	http.HandleFunc("POST /bsky/post", srv.Post)
@@ -280,32 +279,6 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("login successful", "did", sessData.AccountDID.String())
 	http.Redirect(w, r, "/bsky/post", http.StatusFound)
-}
-
-func (s *Server) OAuthRefresh(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	did, sessionID := s.currentSessionDID(r)
-	if did == nil {
-		// TODO: supposed to set a WWW header; and could redirect?
-		http.Error(w, "not authenticated", http.StatusUnauthorized)
-		return
-	}
-
-	oauthSess, err := s.OAuth.ResumeSession(ctx, *did, sessionID)
-	if err != nil {
-		http.Error(w, "not authenticated", http.StatusUnauthorized)
-		return
-	}
-
-	_, err = oauthSess.RefreshTokens(ctx)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	s.OAuth.Store.SaveSession(ctx, *oauthSess.Data)
-	slog.Info("refreshed tokens")
-	http.Redirect(w, r, "/", http.StatusFound)
 }
 
 func (s *Server) OAuthLogout(w http.ResponseWriter, r *http.Request) {
