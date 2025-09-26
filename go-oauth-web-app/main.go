@@ -88,7 +88,7 @@ var tmplError = template.Must(template.Must(template.New("error.html").Parse(tmp
 
 func runServer(cctx *cli.Context) error {
 
-	scopes := []string{"atproto", "transition:generic"}
+	scopes := []string{"atproto", "repo:app.bsky.feed.post?action=create"}
 	bind := ":8080"
 
 	var config oauth.ClientConfig
