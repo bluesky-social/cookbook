@@ -16,13 +16,19 @@
   <nav>
     <ul>
     {{ if .DID }}
-      <li><span style="font-family: monospace; font-weight: bold;">{{ .DID }}</span>
-      <li><a href="/bsky/post">Create Post</a>
-      <li><a href="/oauth/logout">Logout</a>
+      <li><span style="font-family: monospace; font-weight: bold;">
+        {{if ne .Handle "handle.invalid" }}
+          {{ .Handle }}
+        {{ else }}
+          {{ .DID }}
+        {{ end }}
+      </span></li>
+      <li><a href="/bsky/post">Create Post</a></li>
+      <li><a href="/oauth/logout">Logout</a></li>
     {{ else }}
-      <li><a href="/oauth/login">Login</a>
+      <li><a href="/oauth/login">Login</a></li>
     {{ end }}
-      <li><a href="https://github.com/bluesky-social/cookbook/tree/main/go-oauth-web-app">Code</a>
+      <li><a href="https://github.com/bluesky-social/cookbook/tree/main/go-oauth-web-app">Code</a></li>
     </ul>
   </nav>
 </header>

@@ -63,12 +63,14 @@ type Server struct {
 }
 
 type TmplData struct {
-	DID   *syntax.DID
-	Error string
+	DID    *syntax.DID
+	Handle string
+	Error  string
 }
 
 type SuccessTmplData struct {
 	DID    *syntax.DID
+	Handle string
 	PdsUrl string
 	Repo   string
 	Rkey   string
@@ -165,22 +167,26 @@ func runServer(cctx *cli.Context) error {
 	return nil
 }
 
-func (s *Server) currentSessionDID(r *http.Request) (*syntax.DID, string) {
+func (s *Server) currentSessionDID(r *http.Request) (*syntax.DID, string, string) {
 	sess, _ := s.CookieStore.Get(r, "oauth-demo")
 	accountDID, ok := sess.Values["account_did"].(string)
 	if !ok || accountDID == "" {
-		return nil, ""
+		return nil, "", ""
 	}
 	did, err := syntax.ParseDID(accountDID)
 	if err != nil {
-		return nil, ""
+		return nil, "", ""
 	}
 	sessionID, ok := sess.Values["session_id"].(string)
 	if !ok || sessionID == "" {
-		return nil, ""
+		return nil, "", ""
+	}
+	handle, ok := sess.Values["handle"].(string)
+	if !ok || handle == "" {
+		return nil, "", ""
 	}
 
-	return &did, sessionID
+	return &did, sessionID, handle
 }
 
 func strPtr(raw string) *string {
@@ -224,7 +230,7 @@ func (s *Server) Homepage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// attempts to load Session to display links
-	did, sessionID := s.currentSessionDID(r)
+	did, sessionID, handle := s.currentSessionDID(r)
 	if did == nil {
 		tmplHome.Execute(w, nil)
 		return
@@ -235,7 +241,7 @@ func (s *Server) Homepage(w http.ResponseWriter, r *http.Request) {
 		tmplHome.Execute(w, nil)
 		return
 	}
-	tmplHome.Execute(w, TmplData{DID: did})
+	tmplHome.Execute(w, TmplData{DID: did, Handle: handle})
 }
 
 func (s *Server) OAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -280,10 +286,27 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// retrieve session metadata
+	oauthSess, err := s.OAuth.ResumeSession(ctx, sessData.AccountDID, sessData.SessionID)
+	if err != nil {
+		http.Error(w, "not authenticated", http.StatusUnauthorized)
+		return
+	}
+	c := oauthSess.APIClient()
+	var resp struct {
+		Handle string `json:"handle"`
+		// TODO: more fields?
+	}
+	if err := c.Get(ctx, "com.atproto.server.getSession", nil, &resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	// create signed cookie session, indicating account DID
 	sess, _ := s.CookieStore.Get(r, "oauth-demo")
 	sess.Values["account_did"] = sessData.AccountDID.String()
 	sess.Values["session_id"] = sessData.SessionID
+	sess.Values["handle"] = resp.Handle
 	if err := sess.Save(r, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -296,7 +319,7 @@ func (s *Server) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Server) OAuthLogout(w http.ResponseWriter, r *http.Request) {
 
 	// revoke tokens and delete session from auth store
-	did, sessionID := s.currentSessionDID(r)
+	did, sessionID, _ := s.currentSessionDID(r)
 	if did != nil {
 		if err := s.OAuth.Logout(r.Context(), *did, sessionID); err != nil {
 			slog.Error("failed to delete session", "did", did, "err", err)
@@ -321,7 +344,7 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("in post handler")
 
-	did, sessionID := s.currentSessionDID(r)
+	did, sessionID, handle := s.currentSessionDID(r)
 	if did == nil {
 		// TODO: supposed to set a WWW header; and could redirect?
 		http.Error(w, "not authenticated", http.StatusUnauthorized)
@@ -329,7 +352,7 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != "POST" {
-		tmplPost.Execute(w, TmplData{DID: did})
+		tmplPost.Execute(w, TmplData{DID: did, Handle: handle})
 		return
 	}
 
@@ -366,12 +389,13 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 	if err := c.Post(ctx, "com.atproto.repo.createRecord", body, &resp); err != nil {
 		postErr := fmt.Errorf("posting failed: %w", err).Error()
 		slog.Error(postErr)
-		tmplError.Execute(w, TmplData{DID: did, Error: postErr})
+		tmplError.Execute(w, TmplData{DID: did, Handle: handle, Error: postErr})
 		return
 	}
 
 	tmplPostSuccess.Execute(w, SuccessTmplData{
 		DID:    did,
+		Handle: handle,
 		PdsUrl: oauthSess.Data.HostURL,
 		Repo:   resp.Uri.Authority().String(),
 		Rkey:   resp.Uri.RecordKey().String(),
