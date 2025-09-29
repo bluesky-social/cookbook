@@ -1,8 +1,11 @@
 {% extends 'base.html' %}
 
 {% block content %}
-  <form method="post">
-    <textarea name="post_text" placeholder="What's up?" id="post_text" required autofocus>I'm testing the Python #ExampleOAuthClient</textarea>
-    <input type="submit" value="Poast!">
-  </form>
+  <article>
+    <h2>Post</h2>
+    <form method="post">
+      <textarea name="post_text" placeholder="What's up?" id="post_text" required autofocus>I'm testing the Python #ExampleOAuthClient</textarea>
+      <input type="submit" value="Poast!">
+    </form>
+  </article>
 {% endblock %}

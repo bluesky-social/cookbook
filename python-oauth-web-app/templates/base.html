@@ -5,6 +5,15 @@
   <meta name="referrer" content="origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.purple.min.css">
+  <style>
+    code {
+      /* fsr pico sets this to inline-block? */
+      display: inline;
+    }
+    article {
+      max-width: 32em;
+    }
+  </style>
   <title>atproto OAuth Web Service Example</title>
 </head>
 <body>
@@ -12,7 +21,7 @@
   <hgroup>
     <h1>atproto OAuth Web Service Example</h1>
     {% if g.user %}
-      <p>Hello <span style="font-family: monospace;">@{{ g.user['handle'] }}</span>!</p>
+      <p>Hello, <code>@{{ g.user['handle'] }}</code>!</p>
     {% endif %}
   </hgroup>
   <nav>
