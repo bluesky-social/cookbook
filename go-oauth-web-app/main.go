@@ -369,8 +369,6 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 	}
 	text := r.PostFormValue("post_text")
 
-	// TODO: facet parsing
-
 	body := map[string]any{
 		"repo":       c.AccountDID.String(),
 		"collection": "app.bsky.feed.post",

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"regexp"
 )
 
@@ -11,7 +10,6 @@ var hashtagRegex = regexp.MustCompile(`#[\p{L}\p{N}_\-]+`) // Allow Unicode lett
 func parseFacets(text string) []map[string]any {
 	var res []map[string]any
 	for _, match := range hashtagRegex.FindAllStringSubmatchIndex(text, -1) {
-		fmt.Println(match)
 		res = append(res, map[string]any{
 			"index": map[string]any{
 				"byteStart": match[0],
