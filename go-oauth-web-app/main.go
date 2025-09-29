@@ -354,6 +354,7 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 		"record": map[string]any{
 			"$type":     "app.bsky.feed.post",
 			"text":      text,
+			"facets":    parseFacets(text),
 			"createdAt": syntax.DatetimeNow(),
 		},
 	}
