@@ -6,6 +6,15 @@
   <meta name="referrer" content="origin-when-cross-origin">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.purple.min.css">
+  <style>
+    code {
+      /* fsr pico sets this to inline-block? */
+      display: inline;
+    }
+    article {
+      max-width: 32em;
+    }
+  </style>
   <title>atproto OAuth demo (indigo)</title>
 </head>
 <body>
@@ -16,11 +25,11 @@
   <nav>
     <ul>
     {{ if .DID }}
-      <li><span style="font-family: monospace; font-weight: bold;">
+      <li>Welcome, 
         {{if ne .Handle "handle.invalid" }}
-          {{ .Handle }}
+          <code>@{{ .Handle }}</code>
         {{ else }}
-          {{ .DID }}
+          <code>{{ .DID }}</code>
         {{ end }}
       </span></li>
       <li><a href="/bsky/post">Create Post</a></li>
