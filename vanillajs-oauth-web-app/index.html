@@ -10,6 +10,9 @@
 			/* fsr pico sets this to inline-block? */
 			display: inline;
 		}
+		article {
+			max-width: 32em;
+		}
 	</style>
 	<title>atproto OAuth Browser Client Example</title>
 	<script type="importmap">
@@ -43,7 +46,7 @@
 			</article>
 
 			<!-- hidden by default, will be shown if an existing session cannot be resumed -->
-			<article id="login-container" style="max-width: 32em; display: none;">
+			<article id="login-container" style="display: none;">
 				<h3>Login with AT Protocol</h3>
 				<form id="login-form">
 					<p>Enter your handle to continue</p>
