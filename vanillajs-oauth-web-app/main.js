@@ -136,7 +136,7 @@ async function doPost(message) {
 	// show the "success" screen
 	document.getElementById("success-pds").href = `${pdsHost}xrpc/com.atproto.repo.getRecord?repo=${uriRepo}&collection=app.bsky.feed.post&rkey=${uriRkey}`;
 	document.getElementById("success-bsky").href = `https://bsky.app/profile/${uriRepo}/post/${uriRkey}`;
-	document.getElementById("success-zeppelin").href = `https://zeppelin.social/profile/${uriRepo}/post/${uriRkey}`;
+	document.getElementById("success-blacksky").href = `https://blacksky.community/profile/${uriRepo}/post/${uriRkey}`;
 	document.getElementById("success-pdsls").href = `https://pdsls.dev/${atUri}`;
 	document.getElementById("success-container").style.display = "inherit"; // unhide
 }
