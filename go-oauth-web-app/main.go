@@ -67,6 +67,14 @@ type TmplData struct {
 	Error string
 }
 
+type SuccessTmplData struct {
+	DID    *syntax.DID
+	PdsUrl string
+	Repo   string
+	Rkey   string
+	AtUri  string
+}
+
 //go:embed "base.html"
 var tmplBaseText string
 
@@ -81,6 +89,10 @@ var tmplLogin = template.Must(template.Must(template.New("login.html").Parse(tmp
 //go:embed "post.html"
 var tmplPostText string
 var tmplPost = template.Must(template.Must(template.New("post.html").Parse(tmplBaseText)).Parse(tmplPostText))
+
+//go:embed "post_success.html"
+var tmplPostSuccessText string
+var tmplPostSuccess = template.Must(template.Must(template.New("post_success.html").Parse(tmplBaseText)).Parse(tmplPostSuccessText))
 
 //go:embed "error.html"
 var tmplErrorText string
@@ -334,6 +346,8 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 	}
 	text := r.PostFormValue("post_text")
 
+	// TODO: facet parsing
+
 	body := map[string]any{
 		"repo":       c.AccountDID.String(),
 		"collection": "app.bsky.feed.post",
@@ -343,12 +357,23 @@ func (s *Server) Post(w http.ResponseWriter, r *http.Request) {
 			"createdAt": syntax.DatetimeNow(),
 		},
 	}
+	var resp struct {
+		Uri syntax.ATURI `json:"uri"` // the only field we care about
+	}
 
 	slog.Info("attempting post...", "text", text)
-	if err := c.Post(ctx, "com.atproto.repo.createRecord", body, nil); err != nil {
-		http.Error(w, fmt.Errorf("posting failed: %w", err).Error(), http.StatusBadRequest)
+	if err := c.Post(ctx, "com.atproto.repo.createRecord", body, &resp); err != nil {
+		postErr := fmt.Errorf("posting failed: %w", err).Error()
+		slog.Error(postErr)
+		tmplError.Execute(w, TmplData{DID: did, Error: postErr})
 		return
 	}
 
-	http.Redirect(w, r, "/bsky/post", http.StatusFound)
+	tmplPostSuccess.Execute(w, SuccessTmplData{
+		DID:    did,
+		PdsUrl: oauthSess.Data.HostURL,
+		Repo:   resp.Uri.Authority().String(),
+		Rkey:   resp.Uri.RecordKey().String(),
+		AtUri:  resp.Uri.String(),
+	})
 }

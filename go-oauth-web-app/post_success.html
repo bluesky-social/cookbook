@@ -1,0 +1,13 @@
+{{ define "content" }}
+  <article>
+    <h2>Success!</h2>
+    <p>The post record has been created on your PDS. It should be visible at:</p>
+    <ul>
+        <li>Your PDS's <a href="{{ .PdsUrl }}/xrpc/com.atproto.repo.getRecord?repo={{ .Repo }}&amp;collection=app.bsky.feed.post&amp;rkey={{ .Rkey }}"><code>com.atproto.repo.getRecord</code> API</a></li>
+        <li><a href="https://bsky.app/profile/{{ .Repo }}/post/{{ .Rkey }}">The Bluesky web app</a></li>
+        <li>Independent Bluesky apps like <a href="https://zeppelin.social/profile/{{ .Repo }}/post/{{ .Rkey }}">Zeppelin</a></li>
+        <li>The <a href="https://pdsls.dev/{{ .AtUri }}">PDSls</a> AT Protocol Explorer tool</li>
+        <li>...and many other places that speak AT Protocol!</li>
+    </ul>
+  </article>
+{{ end }}
