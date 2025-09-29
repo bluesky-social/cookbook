@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-var hashtagRegex = regexp.MustCompile(`#\w+?\b`)
+var hashtagRegex = regexp.MustCompile(`#[\p{L}\p{N}_\-]+`) // Allow Unicode letters + Unicode numbers
 
 // TODO: support more than just hashtags!
 func parseFacets(text string) []map[string]any {
