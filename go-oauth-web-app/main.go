@@ -150,13 +150,21 @@ func runServer(cctx *cli.Context) error {
 		OAuth:       oauthClient,
 	}
 
-	http.HandleFunc("GET /", srv.Homepage)
-	http.HandleFunc("GET /oauth-client-metadata.json", srv.ClientMetadata)
-	http.HandleFunc("GET /oauth/jwks.json", srv.JWKS)
+	// These endpoints are part of the "external" oauth interface, used by the Authorization Server (PDS or Entryway)
+	http.HandleFunc("GET /oauth-client-metadata.json", srv.ClientMetadata) // must correspond to ClientConfig
+	http.HandleFunc("GET /oauth/jwks.json", srv.JWKS)                      // only needed for confidential clients. must match endpoint listed in client metadata
+	http.HandleFunc("GET /oauth/callback", srv.OAuthCallback)              // must correspond to ClientConfig
+	// The AS redirects the user's browser to the callback endpoint, after auth (successful or otherwise)
+
+	// These are user-facing endpoints for managing oauth session lifecycle, called via the user's browser.
+	// The endpoint names here are arbitrary although they are also referenced in the HTML templates.
 	http.HandleFunc("GET /oauth/login", srv.OAuthLogin)
 	http.HandleFunc("POST /oauth/login", srv.OAuthLogin)
-	http.HandleFunc("GET /oauth/callback", srv.OAuthCallback)
 	http.HandleFunc("GET /oauth/logout", srv.OAuthLogout)
+
+	// These endpoints implement the functionality of the app itself (i.e. homepage, posting to bluesky)
+	// (Endpoint names are similarly arbitrary, modulo templates)
+	http.HandleFunc("GET /", srv.Homepage)
 	http.HandleFunc("GET /bsky/post", srv.Post)
 	http.HandleFunc("POST /bsky/post", srv.Post)
 
