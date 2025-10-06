@@ -1,0 +1,28 @@
+{{ define "content" }}
+<article>
+  <h3>Login with AT Protocol</h3>
+  <form method="post">
+      <p>Enter your handle to continue</p>
+    <fieldset role="group">
+      <input name="username" id="username" placeholder="handle.example.com" style="font-family: monospace,monospace;" required>
+      <input type="submit" value="Login">
+    </fieldset>
+  </form>
+  <details>
+    <summary><u>What's my handle?</u></summary>
+    <p>If you're a Bluesky user, you already have an AT Protocol handle - it's what comes after the <code>@</code> sign when people mention you. You can see your handle on your Bluesky profile page.</p>
+    <p>You can create an AT Protocol account via Bluesky, but <a href="https://atproto.com/guides/self-hosting">other options</a> are available.</p>
+    <form method="post">
+      <input name="username" type="hidden", value="https://bsky.social">
+      <input type="submit" value="Create Account with Bluesky Social">
+    </form>
+    <p>You may alternatively enter your DID, PDS URL, or entryway URL (eg, <code>https://pds.example.com</code>).</p>
+    </ul>
+  </details>
+  {{if .Error}}
+  <article style="background-color: #861D13;">
+    {{.Error}}
+  </article>
+  {{end}}
+</article>
+{{ end }}

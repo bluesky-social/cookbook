@@ -1,0 +1,50 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="referrer" content="origin-when-cross-origin">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.purple.min.css">
+  <style>
+    code {
+      /* fsr pico sets this to inline-block? */
+      display: inline;
+    }
+    article {
+      max-width: 32em;
+    }
+  </style>
+  <title>atproto OAuth demo (indigo)</title>
+</head>
+<body>
+<header>
+  <hgroup>
+    <h1>atproto OAuth demo (indigo)</h1>
+  </hgroup>
+  <nav>
+    <ul>
+    {{ if .DID }}
+      <li>Welcome, 
+        {{if ne .Handle "handle.invalid" }}
+          <code>@{{ .Handle }}</code>
+        {{ else }}
+          <code>{{ .DID }}</code>
+        {{ end }}
+      </span></li>
+      <li><a href="/bsky/post">Create Post</a></li>
+      <li><a href="/oauth/logout">Logout</a></li>
+    {{ else }}
+      <li><a href="/oauth/login">Login</a></li>
+    {{ end }}
+      <li><a href="https://github.com/bluesky-social/cookbook/tree/main/go-oauth-web-app">Code</a></li>
+    </ul>
+  </nav>
+</header>
+<main>
+  <section class="content">
+    {{ template "content" . }}
+  </section>
+</main>
+</body>
+</html>
