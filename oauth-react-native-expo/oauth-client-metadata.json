@@ -1,5 +1,5 @@
 {
-  "client_id": "https://EXAMPLE.COM/oauth-client-metadata.json",
+  "client_id": "https://EXAMPLE.COM/assets/oauth-client-metadata.json",
   "client_name": "React Native OAuth Client Demo",
   "client_uri": "https://EXAMPLE.COM",
   "redirect_uris": ["https://EXAMPLE.COM/sign-in", "COM.EXAMPLE:/sign-in"],

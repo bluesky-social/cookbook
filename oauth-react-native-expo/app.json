@@ -5,12 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "EXAMPLE.COM",
+    "scheme": "COM.EXAMPLE",
     "userInterfaceStyle": "automatic",
-    "jsEngine": "hermes",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "COM.EXAMPLE"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +24,7 @@
       "package": "COM.EXAMPLE"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
