@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	"github.com/bluesky-social/indigo/atproto/data"
+	"github.com/bluesky-social/indigo/atproto/atdata"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/repo"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -150,7 +150,7 @@ func carUnpack(carPath string) error {
 			return err
 		}
 
-		rec, err := data.UnmarshalCBOR(recBytes)
+		rec, err := atdata.UnmarshalCBOR(recBytes)
 		if err != nil {
 			return err
 		}
