@@ -4,7 +4,7 @@ Download and Inspect Repository (Go)
 
 This is a small helper utility to download atproto repositories as a CAR file, and then unpack contents to JSON files in a directory.
 
-This code was written in 2024 and was intended to demonstrate how the resolution and download mechanics work, for Go developers learning about atproto. Check out the [`goat`](https://github.com/bluesky-social/indigo/tree/main/cmd/goat) command line tool, which does the same thing and is actively maintained.
+This code was written in 2024 and was intended to demonstrate how the resolution and download mechanics work, for Go developers learning about atproto. Check out the [`goat`](https://github.com/bluesky-social/goat) command line tool, which does the same thing and is actively maintained.
 
 ## Install
 
