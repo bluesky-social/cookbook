@@ -1,11 +1,11 @@
 module github.com/bluesky-social/cookbook/go-repo-export
 
-go 1.23.0
+go 1.24
 
-toolchain go1.24.0
+toolchain go1.24.4
 
 require (
-	github.com/bluesky-social/indigo v0.0.0-20250612212613-34115b57349c
+	github.com/bluesky-social/indigo v0.0.0-20251009212240-20524de167fe
 	github.com/ipfs/go-cid v0.5.0
 )
 
