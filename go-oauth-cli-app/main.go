@@ -138,7 +138,8 @@ func main() {
 						return err
 					}
 
-					fmt.Println("logged in:", session.AccountDID)
+					fmt.Println("Success!")
+					fmt.Println("Logged in as:", session.AccountDID)
 
 					return nil
 				},
