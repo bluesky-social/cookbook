@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -119,8 +121,16 @@ func main() {
 					if err != nil {
 						return fmt.Errorf("logging in: %w", err)
 					}
-					fmt.Printf("authUrl: %s\n", authUrl)
-					// TODO: auto-open in browser
+					fmt.Printf("Navigating to: %s\n", authUrl)
+
+					// Note: StartAuthFlow should internally guarantee this anyway, but since we're passing it to xdg-open we want
+					// to be especially certain.
+					if !strings.HasPrefix(authUrl, "https://") {
+						panic("non-https authUrl")
+					}
+					if err := exec.Command("xdg-open", authUrl).Run(); err != nil {
+						fmt.Println("Failed to open browser automatically. Please manually visit the above link.")
+					}
 
 					session, err := oauthClient.ProcessCallback(ctx, <-callbackRes)
 					if err != nil {
