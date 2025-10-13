@@ -39,7 +39,7 @@ func listenForCallback(ctx context.Context, res chan url.Values) (int, error) {
 		w.WriteHeader(200)
 		// enough HTML to immediately close the webpage
 		w.Write([]byte("<!DOCTYPE html><html><body onload='close();'>OK</body></html>\n"))
-		go server.Shutdown(ctx) // XXX: is this the right context to pass?
+		go server.Shutdown(ctx)
 	})
 
 	go func() {
