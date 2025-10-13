@@ -94,6 +94,7 @@ func buildOAuthClient() (*oauth.ClientConfig, *oauth.ClientApp, *SqliteStore, er
 func main() {
 
 	cmd := &cli.Command{
+		Usage: "A basic example CLI OAuth client using the indigo SDK",
 		Commands: []*cli.Command{
 			{
 				Name:  "login",

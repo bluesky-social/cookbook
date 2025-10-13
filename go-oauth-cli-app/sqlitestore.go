@@ -96,6 +96,7 @@ func (m *SqliteStore) GetSession(ctx context.Context, did syntax.DID, sessionID 
 	return &row.Data, nil
 }
 
+// not part of the ClientAuthStore interface, just used for the CLI app
 func (m *SqliteStore) GetMostRecentSession(ctx context.Context) (*oauth.ClientSessionData, error) {
 	var row storedSessionData
 	res := m.db.WithContext(ctx).Order(clause.OrderByColumn{
