@@ -37,8 +37,7 @@ func listenForCallback(ctx context.Context, res chan url.Values) (int, error) {
 		res <- r.URL.Query()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(200)
-		// enough HTML to immediately close the webpage
-		w.Write([]byte("<!DOCTYPE html><html><body onload='close();'>OK</body></html>\n"))
+		w.Write([]byte("<!DOCTYPE html><html><body><h2>go-oauth-cli-app</h2><p>You can safely close this window and return to your application.</p></body></html>\n"))
 		go server.Shutdown(ctx)
 	})
 
