@@ -16,6 +16,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/urfave/cli/v3"
 )
 
@@ -173,6 +174,54 @@ func main() {
 					fmt.Println("handle:", resp.Handle)
 					fmt.Println("host:  ", oauthSess.Data.HostURL)
 
+					return nil
+				},
+			},
+			{
+				Name:  "bsky-post",
+				Usage: "post a message to bsky",
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					msg := cmd.Args().First()
+					if msg == "" {
+						return fmt.Errorf("message text required")
+					}
+
+					_, oauthClient, store, err := buildOAuthClient()
+					if err != nil {
+						return err
+					}
+
+					lastSessData, err := store.GetMostRecentSession(ctx)
+					if err != nil {
+						return err
+					}
+
+					oauthSess, err := oauthClient.ResumeSession(ctx, lastSessData.AccountDID, lastSessData.SessionID)
+					if err != nil {
+						return err
+					}
+
+					c := oauthSess.APIClient()
+
+					body := map[string]any{
+						"repo":       c.AccountDID.String(),
+						"collection": "app.bsky.feed.post",
+						"record": map[string]any{
+							"$type":     "app.bsky.feed.post",
+							"text":      msg,
+							"createdAt": syntax.DatetimeNow(),
+						},
+					}
+					var resp struct {
+						Uri syntax.ATURI `json:"uri"`
+					}
+
+					fmt.Println("posting...")
+					if err := c.Post(ctx, "com.atproto.repo.createRecord", body, &resp); err != nil {
+						return err
+					}
+
+					fmt.Printf("Success! Your post should be live at https://bsky.app/profile/%s/post/%s\n", resp.Uri.Authority(), resp.Uri.RecordKey())
 					return nil
 				},
 			},
