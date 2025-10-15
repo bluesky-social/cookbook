@@ -78,6 +78,7 @@ def client_assertion_jwt(
             "aud": authserver_url,
             "jti": generate_token(),
             "iat": int(time.time()),
+            "exp": int(time.time())+(1*60), # expires in 1 minute
         },
         client_secret_jwk,
     ).decode("utf-8")
