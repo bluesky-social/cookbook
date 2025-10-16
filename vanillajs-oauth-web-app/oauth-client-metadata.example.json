@@ -1,0 +1,13 @@
+{
+    "client_id": "https://EXAMPLE.COM/oauth-client-metadata.json",
+    "dpop_bound_access_tokens": true,
+    "application_type": "web",
+    "redirect_uris": ["https://EXAMPLE.COM"],
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"],
+    "scope": "atproto repo:app.bsky.feed.post?action=create",
+    "token_endpoint_auth_method": "private_key_jwt",
+    "token_endpoint_auth_signing_alg": "ES256",
+    "client_name": "atproto OAuth VanillaJS SPA Demo",
+    "client_uri": "https://EXAMPLE.COM"
+}
