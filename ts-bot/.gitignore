@@ -3,3 +3,6 @@ node_modules/
 
 # environment variable files
 .env
+
+# build artifacts
+index.js
