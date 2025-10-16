@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import functools
+import regex
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 from flask import (
@@ -24,6 +25,7 @@ from atproto_identity import (
 )
 from atproto_oauth import (
     refresh_token_request,
+    revoke_token_request,
     pds_authed_req,
     resolve_pds_authserver,
     initial_token_request,
@@ -31,6 +33,8 @@ from atproto_oauth import (
     fetch_authserver_meta,
 )
 from atproto_security import is_safe_url
+from atproto_util import parse_full_aturi
+from bsky_util import extract_facets
 
 app = Flask(__name__)
 
@@ -42,6 +46,9 @@ CLIENT_SECRET_JWK = JsonWebKey.import_key(app.config["CLIENT_SECRET_JWK"])
 CLIENT_PUB_JWK = json.loads(CLIENT_SECRET_JWK.as_json(is_private=False))
 # Defensively check that the public JWK is really public and didn't somehow end up with secret cryptographic key info
 assert "d" not in CLIENT_PUB_JWK
+
+# OAuth scopes requested by this app (goes in the client metadata, and authorization requests)
+OAUTH_SCOPE = "atproto repo:app.bsky.feed.post?action=create"
 
 
 # Helpers for managing database connection.
@@ -119,10 +126,10 @@ def homepage():
 
 # Every atproto OAuth client must have a public client metadata JSON document. It does not need to be at this specific path. The full URL to this file is the "client_id" of the app.
 # This implementation dynamically uses the HTTP request Host name to infer the "client_id".
-@app.route("/oauth/client-metadata.json")
+@app.route("/oauth-client-metadata.json")
 def oauth_client_metadata():
     app_url = request.url_root.replace("http://", "https://")
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
 
     return jsonify(
         {
@@ -133,7 +140,7 @@ def oauth_client_metadata():
             "redirect_uris": [f"{app_url}oauth/callback"],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
-            "scope": "atproto transition:generic",
+            "scope": OAUTH_SCOPE,
             "token_endpoint_auth_method": "private_key_jwt",
             "token_endpoint_auth_signing_alg": "ES256",
             # NOTE: in theory we can return the public key (in JWK format) inline
@@ -164,10 +171,24 @@ def oauth_login():
 
     # Login can start with a handle, DID, or auth server URL. We are calling whatever the user supplied the "username".
     username = request.form["username"]
+
+    # strip unicode control/formatting codepoints (common in copy-pasted handles)
+    username = regex.sub(r"[\p{C}]", "", username)
+
+    # strip @ prefix, if present
+    if is_valid_handle(username.removeprefix("@")):
+        username = username.removeprefix("@")
+
     if is_valid_handle(username) or is_valid_did(username):
         # If starting with an account identifier, resolve the identity (bi-directionally), fetch the PDS URL, and resolve to the Authorization Server URL
         login_hint = username
-        did, handle, did_doc = resolve_identity(username)
+
+        try:
+            did, handle, did_doc = resolve_identity(username)
+        except Exception as e:
+            flash(f"Failed to resolve identity: {e}", "error")
+            return render_template("login.html"), 400
+
         pds_url = pds_endpoint(did_doc)
         print(f"account PDS: {pds_url}")
         authserver_url = resolve_pds_authserver(pds_url)
@@ -180,9 +201,10 @@ def oauth_login():
         try:
             authserver_url = resolve_pds_authserver(initial_url)
         except Exception:
-            authserver_url = initial_url
+            # If initial_url is an AS url, strip any trailing slashes
+            authserver_url = initial_url.rstrip("/")
     else:
-        flash("Not a valid handle, DID, or auth server URL")
+        flash("Not a valid handle, DID, or auth server URL", "error")
         return render_template("login.html"), 400
 
     # Fetch Auth Server metadata. For a self-hosted PDS, this will be the same server (the PDS). For large-scale PDS hosts like Bluesky, this may be a separate "entryway" server filling the Auth Server role.
@@ -194,19 +216,16 @@ def oauth_login():
     except Exception as err:
         print(f"failed to fetch auth server metadata: {err}")
         # raise err
-        flash("Failed to fetch Auth Server (Entryway) OAuth metadata")
+        flash("Failed to fetch Auth Server (Entryway) OAuth metadata", "error")
         return render_template("login.html"), 400
 
     # Generate DPoP private signing key for this account session. In theory this could be defered until the token request at the end of the athentication flow, but doing it now allows early binding during the PAR request.
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
 
-    # OAuth scopes requested by this app
-    scope = "atproto transition:generic"
-
     # Dynamically compute our "client_id" based on the request HTTP Host
     app_url = request.url_root.replace("http://", "https://")
     redirect_uri = f"{app_url}oauth/callback"
-    client_id = f"{app_url}oauth/client-metadata.json"
+    client_id = f"{app_url}oauth-client-metadata.json"
 
     # Submit OAuth Pushed Authentication Request (PAR). We could have constructed a more complex authentication request URL below instead, but there are some advantages with PAR, including failing fast, early DPoP binding, and no URL length limitations.
     pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(
@@ -215,7 +234,7 @@ def oauth_login():
         login_hint,
         client_id,
         redirect_uri,
-        scope,
+        OAUTH_SCOPE,
         CLIENT_SECRET_JWK,
         dpop_private_jwk,
     )
@@ -235,7 +254,7 @@ def oauth_login():
             handle,  # might be None
             pds_url,  # might be None
             pkce_verifier,
-            scope,
+            OAUTH_SCOPE,
             dpop_authserver_nonce,
             dpop_private_jwk.as_json(is_private=True),
         ],
@@ -252,6 +271,11 @@ def oauth_login():
 # Endpoint for receiving "callback" responses from the Authorization Server, to complete the auth flow.
 @app.route("/oauth/callback")
 def oauth_callback():
+    if error := request.args.get("error"):
+        error_description = request.args.get("error_description", "")
+        flash(f"Authorization failed: {error}: {error_description}", "error")
+        return redirect("/oauth/login")
+
     state = request.args["state"]
     authserver_iss = request.args["iss"]
     authorization_code = request.args["code"]
@@ -354,6 +378,14 @@ def oauth_refresh():
 @login_required
 @app.route("/oauth/logout")
 def oauth_logout():
+    app_url = request.url_root.replace("http://", "https://")
+
+    try:
+        revoke_token_request(g.user, app_url, CLIENT_SECRET_JWK)
+    except Exception as e:
+        print("Error during token revocation:", e)
+        # but still proceed to delete the session on our end
+
     query_db("DELETE FROM oauth_session WHERE did = ?;", [g.user["did"]])
     session.clear()
     return redirect("/")
@@ -376,6 +408,7 @@ def bsky_post():
         "record": {
             "$type": "app.bsky.feed.post",
             "text": request.form["post_text"],
+            "facets": extract_facets(request.form["post_text"]),
             "createdAt": now,
         },
     }
@@ -384,8 +417,16 @@ def bsky_post():
         print(f"PDS HTTP Error: {resp.json()}")
     resp.raise_for_status()
 
-    flash("Post record created in PDS!")
-    return render_template("bsky_post.html")
+    at_uri = resp.json()["uri"]
+    record_repo, _, record_rkey = parse_full_aturi(at_uri)
+
+    return render_template(
+        "bsky_post_success.html",
+        repo=record_repo,
+        rkey=record_rkey,
+        pds_url=pds_url,
+        at_uri=at_uri
+    )
 
 
 @app.errorhandler(500)
