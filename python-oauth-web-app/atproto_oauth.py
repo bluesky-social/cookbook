@@ -141,7 +141,7 @@ def auth_server_post(
         resp = sess.post(post_url, data=post_data, headers={"DPoP": dpop_proof})
 
     # Handle DPoP missing/invalid nonce error by retrying with server-provided nonce
-    if resp.status_code == 400 and resp.json()["error"] == "use_dpop_nonce":
+    if is_use_dpop_nonce_error_response(resp):
         dpop_authserver_nonce = resp.headers["DPoP-Nonce"]
         print(f"retrying with new auth server DPoP nonce: {dpop_authserver_nonce}")
         # print(server_nonce)
