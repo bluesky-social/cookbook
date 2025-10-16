@@ -6,6 +6,8 @@ from authlib.jose import JsonWebKey
 from authlib.common.security import generate_token
 from authlib.jose import jwt
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
+from requests import Response
+import urllib.request
 
 from atproto_security import is_safe_url, hardened_http
 
@@ -336,6 +338,33 @@ def pds_dpop_jwt(
     ).decode("utf-8")
     return dpop_proof
 
+# Minimal www-authenticate header parser, only supports the format expected for DPoP nonce errors
+def parse_www_authenticate(data: str) -> Tuple[str, dict]:
+	scheme, _, params = data.partition(" ")
+	items = urllib.request.parse_http_list(params)
+	opts = urllib.request.parse_keqv_list(items)
+	return scheme, opts
+
+# A resource server may signal the need for a [new] DPoP nonce via one of two methods
+# 1. WWW-Authenticate header with paramater error="use_dpop_nonce" (see https://datatracker.ietf.org/doc/html/rfc9449#RSNonce)
+# 2. JSON response body with field error="use_dpop_nonce"
+# The latter is only supposed to be returned by an Authorization Server (see https://datatracker.ietf.org/doc/html/rfc9449#name-authorization-server-provid), but we support it anyway.
+def is_use_dpop_nonce_error_response(resp: Response):
+    if resp.status_code not in [400, 401]:
+        return False
+    www_authenticate = resp.headers.get("WWW-Authenticate")
+    if www_authenticate:
+        try:
+            scheme, params = parse_www_authenticate(www_authenticate)
+            if scheme.lower() == "dpop" and params.get("error") == "use_dpop_nonce":
+                return True
+        except:
+            pass
+    json_body = resp.json()
+    if isinstance(json_body, dict) and json_body.get("error") == "use_dpop_nonce":
+        return True
+    return False
+
 
 # Helper to demonstrate making a request (HTTP GET or POST) to the user's PDS ("Resource Server" in OAuth terminology) using DPoP and access token.
 # This method returns a 'requests' reponse, without checking status code.
@@ -365,8 +394,7 @@ def pds_authed_req(method: str, url: str, user: dict, db: Any, body=None) -> Any
             )
 
         # If we got a new server-provided DPoP nonce, store it in database and retry.
-        # NOTE: the type of error might also be communicated in the `WWW-Authenticate` HTTP response header.
-        if resp.status_code in [400, 401] and resp.json()["error"] == "use_dpop_nonce":
+        if is_use_dpop_nonce_error_response(resp):
             # print(resp.headers)
             dpop_pds_nonce = resp.headers["DPoP-Nonce"]
             print(f"retrying with new PDS DPoP nonce: {dpop_pds_nonce}")
