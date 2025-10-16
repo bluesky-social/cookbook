@@ -7,7 +7,7 @@ from authlib.common.security import generate_token
 from authlib.jose import jwt
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from requests import Response
-from www_authenticate import parse_www_authenticate
+import urllib.request
 
 from atproto_security import is_safe_url, hardened_http
 
@@ -337,6 +337,12 @@ def pds_dpop_jwt(
     ).decode("utf-8")
     return dpop_proof
 
+# Minimal www-authenticate header parser, only supports the format expected for DPoP nonce errors
+def parse_www_authenticate(data: str) -> Tuple[str, dict]:
+	scheme, _, params = data.partition(" ")
+	items = urllib.request.parse_http_list(params)
+	opts = urllib.request.parse_keqv_list(items)
+	return scheme, opts
 
 # A resource server may signal the need for a [new] DPoP nonce via one of two methods
 # 1. WWW-Authenticate header with paramater error="use_dpop_nonce" (see https://datatracker.ietf.org/doc/html/rfc9449#RSNonce)
@@ -347,9 +353,12 @@ def is_use_dpop_nonce_error_response(resp: Response):
         return False
     www_authenticate = resp.headers.get("WWW-Authenticate")
     if www_authenticate:
-        _, params = parse_www_authenticate(www_authenticate)
-        if params.get("error") == "use_dpop_nonce":
-            return True
+        try:
+            scheme, params = parse_www_authenticate(www_authenticate)
+            if scheme.lower() == "dpop" and params.get("error") == "use_dpop_nonce":
+                return True
+        except:
+            pass
     json_body = resp.json()
     if isinstance(json_body, dict) and json_body.get("error") == "use_dpop_nonce":
         return True
