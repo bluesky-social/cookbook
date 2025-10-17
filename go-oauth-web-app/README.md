@@ -36,13 +36,13 @@ The front-end is templated HTML, with all user interaction done via link clicks 
 
 It looks like this:
 
-![screenshot](/img/go-web-example-screenshot.png)
+![screenshot](./img/go-web-example-screenshot.png)
 
 The session between the browser and the app backend will be maintained using cookies, while the session between the app backend and the user’s PDS will be maintained using OAuth.
 
 At a high level, it's this:
 
-![bff](/img/bff_example.drawio.svg)
+![bff](./img/bff_example.drawio.svg)
 
 ### Session Storage
 
@@ -64,7 +64,7 @@ The `scopes` array defines which permissions the app will request from the user,
 
 When signing in for the first time, the user’s PDS will present them with a UI that looks something like this:
 
-![screenshot](/img/authorization-screenshot.png)
+![screenshot](./img/authorization-screenshot.png)
 
 When it comes to scopes, your app should aim to not request any permissions beyond those it absolutely requires. Aside from being bad for security, requesting overly broad permissions makes it more likely that a user decides to reject the permissions and not use your app at all.
 
