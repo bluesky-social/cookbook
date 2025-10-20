@@ -1,0 +1,18 @@
+{
+  "client_id": "https://retr0.id/stuff/go-oauth-cli-app.json",
+  "application_type": "native",
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "scope": "atproto repo:app.bsky.feed.post?action=create",
+  "response_types": [
+    "code"
+  ],
+  "redirect_uris": [
+    "http://127.0.0.1/callback"
+  ],
+  "token_endpoint_auth_method": "none",
+  "dpop_bound_access_tokens": true,
+  "client_name": "go-oauth-cli-app example"
+}
