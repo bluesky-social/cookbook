@@ -1,6 +1,6 @@
 # OAuth Web Service with Python
 
-This is a example project showing how to implement an Python web service which uses atproto OAuth for authentication. It uses Flask as a web framework, and sqlite as a database to store session tokens.
+This is a example project showing how to implement an Python web service which uses atproto OAuth for authentication. It uses Flask as a web framework, and sqlite as a database to store session tokens. The implementation details are best understood in combination with the [OAuth Client Implementation guide](https://docs.bsky.app/docs/advanced-guides/oauth-client), but see [OAuth Introduction](http://atproto.com/guides/oauth) for a higher level overview.
 
 There is currently a version of this deployed at <https://oauth-flask.demo.bsky.dev/>, though this may not be maintained long-term.
 
