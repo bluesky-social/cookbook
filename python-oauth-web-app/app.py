@@ -3,7 +3,7 @@ import sqlite3
 import functools
 import regex
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from flask import (
     Flask,
     flash,
@@ -50,6 +50,23 @@ assert "d" not in CLIENT_PUB_JWK
 # OAuth scopes requested by this app (goes in the client metadata, and authorization requests)
 OAUTH_SCOPE = "atproto repo:app.bsky.feed.post?action=create"
 
+
+# Dynamically compute our "client_id" based on the request HTTP Host
+def compute_client_id(url_root):
+    parsed_url = urlparse(url_root)
+    if parsed_url.hostname in ["localhost", "127.0.0.1"]:
+        # for localhost testing, see https://atproto.com/specs/oauth#localhost-client-development
+        redirect_uri = f"http://127.0.0.1:{parsed_url.port}/oauth/callback"
+        client_id = "http://localhost?" + urlencode({
+            "redirect_uri": redirect_uri,
+            "scope": OAUTH_SCOPE,
+        })
+    else:
+        app_url = url_root.replace("http://", "https://")
+        redirect_uri = f"{app_url}oauth/callback"
+        client_id = f"{app_url}oauth-client-metadata.json"
+
+    return client_id, redirect_uri
 
 # Helpers for managing database connection.
 # Note that you could use a sqlite ":memory:" database instead. In that case you would want to have a global sqlite connection, instead of re-connecting per connection. This file-based setup is following the Flask docs/tutorial.
@@ -128,6 +145,7 @@ def homepage():
 # This implementation dynamically uses the HTTP request Host name to infer the "client_id".
 @app.route("/oauth-client-metadata.json")
 def oauth_client_metadata():
+    # Note: this endpoint is never reached during localhost testing
     app_url = request.url_root.replace("http://", "https://")
     client_id = f"{app_url}oauth-client-metadata.json"
 
@@ -223,9 +241,7 @@ def oauth_login():
     dpop_private_jwk = JsonWebKey.generate_key("EC", "P-256", is_private=True)
 
     # Dynamically compute our "client_id" based on the request HTTP Host
-    app_url = request.url_root.replace("http://", "https://")
-    redirect_uri = f"{app_url}oauth/callback"
-    client_id = f"{app_url}oauth-client-metadata.json"
+    client_id, redirect_uri = compute_client_id(request.url_root)
 
     # Submit OAuth Pushed Authentication Request (PAR). We could have constructed a more complex authentication request URL below instead, but there are some advantages with PAR, including failing fast, early DPoP binding, and no URL length limitations.
     pkce_verifier, state, dpop_authserver_nonce, resp = send_par_auth_request(
@@ -298,11 +314,12 @@ def oauth_callback():
     assert row["state"] == state
 
     # Complete the auth flow by requesting auth tokens from the authorization server.
-    app_url = request.url_root.replace("http://", "https://")
+    client_id, redirect_uri = compute_client_id(request.url_root)
     tokens, dpop_authserver_nonce = initial_token_request(
         row,
         authorization_code,
-        app_url,
+        client_id,
+        redirect_uri,
         CLIENT_SECRET_JWK,
     )
 
@@ -354,10 +371,10 @@ def oauth_callback():
 @login_required
 @app.route("/oauth/refresh")
 def oauth_refresh():
-    app_url = request.url_root.replace("http://", "https://")
+    client_id, _ = compute_client_id(request.url_root)
 
     tokens, dpop_authserver_nonce = refresh_token_request(
-        g.user, app_url, CLIENT_SECRET_JWK
+        g.user, client_id, CLIENT_SECRET_JWK
     )
 
     # persist updated tokens (and DPoP nonce) to database
@@ -378,10 +395,10 @@ def oauth_refresh():
 @login_required
 @app.route("/oauth/logout")
 def oauth_logout():
-    app_url = request.url_root.replace("http://", "https://")
+    client_id, _ = compute_client_id(request.url_root)
 
     try:
-        revoke_token_request(g.user, app_url, CLIENT_SECRET_JWK)
+        revoke_token_request(g.user, client_id, CLIENT_SECRET_JWK)
     except Exception as e:
         print("Error during token revocation:", e)
         # but still proceed to delete the session on our end

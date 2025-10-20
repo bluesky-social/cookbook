@@ -205,17 +205,14 @@ def send_par_auth_request(
 def initial_token_request(
     auth_request: dict,
     code: str,
-    app_url: str,
+    client_id: str,
+    redirect_uri: str,
     client_secret_jwk: JsonWebKey,
 ) -> Tuple[dict, str]:
     authserver_url = auth_request["authserver_iss"]
 
     # Re-fetch server metadata
     authserver_meta = fetch_authserver_meta(authserver_url)
-
-    # Construct auth token request fields
-    client_id = f"{app_url}oauth-client-metadata.json"
-    redirect_uri = f"{app_url}oauth/callback"
 
     params = {
         "redirect_uri": redirect_uri,
@@ -252,16 +249,13 @@ def initial_token_request(
 # Returns token response (dict) and DPoP nonce (str)
 def refresh_token_request(
     user: dict,
-    app_url: str,
+    client_id: str,
     client_secret_jwk: JsonWebKey,
 ) -> Tuple[dict, str]:
     authserver_url = user["authserver_iss"]
 
     # Re-fetch server metadata
     authserver_meta = fetch_authserver_meta(authserver_url)
-
-    # Construct token request fields
-    client_id = f"{app_url}oauth-client-metadata.json"
 
     params = {
         "grant_type": "refresh_token",
@@ -296,7 +290,7 @@ def refresh_token_request(
 
 def revoke_token_request(
     user: dict,
-    app_url: str,
+    client_id: str,
     client_secret_jwk: JsonWebKey,
 ):
     authserver_url = user["authserver_iss"]
@@ -305,7 +299,6 @@ def revoke_token_request(
     authserver_meta = fetch_authserver_meta(authserver_url)
 
     # Retrieve the existing DPoP signing key for this account/session
-    client_id = f"{app_url}oauth-client-metadata.json"
     dpop_private_jwk = JsonWebKey.import_key(json.loads(user["dpop_private_jwk"]))
     dpop_authserver_nonce = user["dpop_authserver_nonce"]
 
