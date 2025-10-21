@@ -1,6 +1,6 @@
 # OAuth Web Service with Python
 
-This is a example project showing how to implement an Python web service which uses atproto OAuth for authentication. It uses Flask as a web framework, and sqlite as a database to store session tokens.
+This is a example project showing how to implement an Python web service which uses atproto OAuth for authentication. It uses Flask as a web framework, and sqlite as a database to store session tokens. The implementation details are best understood in combination with the [OAuth Client Implementation guide](https://docs.bsky.app/docs/advanced-guides/oauth-client), but see [OAuth Introduction](http://atproto.com/guides/oauth) for a higher level overview.
 
 There is currently a version of this deployed at <https://oauth-flask.demo.bsky.dev/>, though this may not be maintained long-term.
 
@@ -25,13 +25,15 @@ uv run python3 -c 'import secrets; print(secrets.token_hex())'
 uv run ./generate_jwk.py
 ```
 
-Run the service locally (note that OAuth authorization won't actually work from `localhost` for this project):
+Run the service locally:
 
 ```bash
 uv run -- flask run
 ```
 
-Open a public internet tunnel with a valid hostname and HTTPS using a tool like `ngrok`, Tailscale Funnel, or open-source equivalents:
+If you just want to test locally, you can stop here - the service will automatically use a [localhost client ID](https://atproto.com/specs/oauth#localhost-client-development).
+
+To continue with deployment, open a public internet tunnel with a valid hostname and HTTPS using a tool like `ngrok`, Tailscale Funnel, or open-source equivalents:
 
 ```bash
 ngrok http http://localhost:5000

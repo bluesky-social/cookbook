@@ -66,7 +66,8 @@ def resolve_handle(handle: str) -> Optional[str]:
                 val = val[4:]
                 if is_valid_did(val):
                     return val
-    except Exception:
+    except Exception as e:
+        print("DNS TXT handle resolution:", e)
         pass
 
     # then try HTTP well-known
@@ -74,7 +75,8 @@ def resolve_handle(handle: str) -> Optional[str]:
     try:
         with hardened_http.get_session() as sess:
             resp = sess.get(f"https://{handle}/.well-known/atproto-did")
-    except Exception:
+    except Exception as e:
+        print("HTTP handle resolution:", e)
         return None
 
     if resp.status_code != 200:
