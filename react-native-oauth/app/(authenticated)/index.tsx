@@ -4,6 +4,9 @@ import { useBskyAgent } from '@/components/BskyAgentProvider'
 import { usePdsAgent } from '@/components/PdsAgentProvider'
 import { useOAuthSession, useSession } from '@/components/SessionProvider'
 
+/**
+ * Default "index" screen for authenticated users showing profile info.
+ */
 export default function Index() {
   const session = useOAuthSession()
   const { signOut } = useSession()
