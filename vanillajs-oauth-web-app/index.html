@@ -4,7 +4,7 @@
 	<meta charset="utf-8">
 	<meta name="referrer" content="origin-when-cross-origin">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.purple.min.css">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.purple.min.css">
 	<style>
 		code {
 			/* fsr pico sets this to inline-block? */
@@ -25,7 +25,7 @@
 	</script>
 </head>
 <body>
-	<main>
+	<main class="container">
 		<section class="content">
 			<header>
 				<hgroup>
@@ -47,22 +47,18 @@
 
 			<!-- hidden by default, will be shown if an existing session cannot be resumed -->
 			<article id="login-container" style="display: none;">
-				<h3>Login with AT Protocol</h3>
+				<h3>Login with the Atmosphere</h3>
 				<form id="login-form">
 					<p>Enter your handle to continue</p>
 					<fieldset role="group">
-						<input name="username" id="username" placeholder="handle.example.com" style="font-family: monospace,monospace;" required>
+						<input name="username" id="username" placeholder="@alice.example.com" style="font-family: monospace;" required>
 						<button id="login-button">Login</button>
 					</fieldset>
 				</form>
-				<details>
-					<summary><u>What's my handle?</u></summary>
-					<p>If you're a Bluesky user, you already have an AT Protocol handle - it's what comes after the <code style="display: inline;">@</code> sign when people mention you. You can see your handle on your Bluesky profile page.</p>
-					<p>You can create an AT Protocol account via Bluesky, but <a href="https://atproto.com/guides/self-hosting">other options</a> are available.</p>
-					<p><button id="bsky-button">Create Account with Bluesky Social</button></p>
-					<p>You may alternatively enter your DID, PDS URL, or entryway URL (eg, <code>https://pds.example.com</code>).</p>
-					</ul>
-				</details>
+				<p>If you're a Bluesky user, you already have an Atmosphere account.</p>
+				<button id="bsky-button" class="secondary" style="width: 100%">Create Account with Bluesky Social</button>
+				<p></p>
+				<a href="https://atproto.com/guides/self-hosting"><button class="secondary outline" style="width: 100%">Other options</button></a>
 				<p id="login-form-error" style="color: #E37474;"></p>
 			</article>
 
