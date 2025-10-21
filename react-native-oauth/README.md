@@ -1,6 +1,6 @@
-# Welcome to your Expo app 👋
+# React-native (Expo) OAuth based Atmosphere Client Starter
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app), and adapted to include a starter template for building Atmosphere apps, based on the [Authentication in Expo Router](https://docs.expo.dev/router/advanced/authentication/) guide.
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app), and adapted to include a starter template for building Atmosphere apps, with OAuth authentication using the [@atproto/oauth-client-expo](https://www.npmjs.com/package/@atproto/oauth-client-expo) library, based on the [Authentication in Expo Router](https://docs.expo.dev/router/advanced/authentication/) guide.
 
 ## Get started
 

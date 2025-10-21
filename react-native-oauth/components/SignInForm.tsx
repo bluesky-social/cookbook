@@ -38,7 +38,6 @@ export function SignInForm({
         alignItems: 'stretch',
         alignSelf: 'center',
         maxWidth: 400,
-        backgroundColor: '#ddd',
       }}
     >
       <Text style={{ fontWeight: 'bold', fontSize: 18 }}>
