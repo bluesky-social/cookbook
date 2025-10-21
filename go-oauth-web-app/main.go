@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -265,7 +266,7 @@ func (s *Server) OAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username := r.PostFormValue("username")
+	username, _ := strings.CutPrefix(r.PostFormValue("username"), "@")
 
 	slog.Info("OAuthLogin", "client_id", s.OAuth.Config.ClientID, "callback_url", s.OAuth.Config.CallbackURL)
 
