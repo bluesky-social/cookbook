@@ -1,8 +1,11 @@
 {
-  "client_id": "https://EXAMPLE.COM/assets/oauth-client-metadata.json",
+  "client_id": "https://app.example.com/assets/oauth-client-metadata.json",
   "client_name": "React Native OAuth Client Demo",
-  "client_uri": "https://EXAMPLE.COM",
-  "redirect_uris": ["https://EXAMPLE.COM/sign-in", "COM.EXAMPLE:/sign-in"],
+  "client_uri": "https://app.example.com",
+  "redirect_uris": [
+    "https://app.example.com/sign-in",
+    "com.example.app:/sign-in"
+  ],
   "scope": "atproto account:email rpc:*?aud=did:web:api.bsky.app#bsky_appview",
   "token_endpoint_auth_method": "none",
   "response_types": ["code"],

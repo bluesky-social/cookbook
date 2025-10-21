@@ -45,21 +45,16 @@ export function SessionProvider({
     setInitialized(false)
     setSession(null)
 
-    console.debug('HANDLE CALLBACK')
-
     void client
       .handleCallback()
       .then(async (newSession) => {
-        console.debug('HERE', newSession)
         if (newSession) return setSession(newSession)
 
         const lastDid = await store.getItemAsync(CURRENT_AUTH_DID)
-        console.debug('LAST DID', lastDid)
         if (!lastDid) return
 
         // Use "false" as restore argument to allow the app to work off-line
         const restoredSession = await client.restore(lastDid, false)
-        console.debug('RESTORED', restoredSession)
         setSession(restoredSession)
 
         // Force a refresh here, which will cause the session to be deleted
@@ -70,7 +65,6 @@ export function SessionProvider({
         console.warn('Error setting up OAuth Session', err)
       })
       .finally(() => {
-        console.debug('DONE INITIALIZING')
         setInitialized(true)
         setLoading(false)
       })
@@ -128,7 +122,7 @@ export function SessionProvider({
         setLoading(false)
       }
     },
-    [client],
+    [client]
   )
 
   const signOut = useCallback(async () => {
