@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,11 +15,16 @@ import (
 	"strings"
 	"time"
 
+	_ "embed"
+
 	"github.com/adrg/xdg"
 	"github.com/bluesky-social/indigo/atproto/auth/oauth"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/urfave/cli/v3"
 )
+
+//go:embed client_metadata.json
+var clientMetadata []byte
 
 // listens in the background and immediately returns the now-listening port number.
 // When the callback endpoint is requested, it returns the query parameters to the passed channel, and then shuts itself down
@@ -64,10 +70,18 @@ func prepareDbPath() (string, error) {
 }
 
 func buildOAuthClient() (*oauth.ClientConfig, *oauth.ClientApp, *SqliteStore, error) {
+	var meta oauth.ClientMetadata
+	if err := json.Unmarshal(clientMetadata, &meta); err != nil {
+		return nil, nil, nil, err
+	}
+	userAgent := "go-oauth-cli-app example"
+	if meta.ClientName != nil {
+		userAgent = *meta.ClientName
+	}
 	config := oauth.ClientConfig{
-		ClientID:  "https://retr0.id/stuff/go-oauth-cli-app.json",
-		Scopes:    []string{"atproto", "repo:app.bsky.feed.post?action=create"},
-		UserAgent: "go-oauth-cli-app example",
+		ClientID:  meta.ClientID,
+		Scopes:    strings.Split(meta.Scope, " "),
+		UserAgent: userAgent,
 	}
 
 	dbPath, err := prepareDbPath()
