@@ -17,6 +17,8 @@ const clientId = buildClientID();
 let oac; // undefined | BrowserOAuthClient
 let agent; // undefined | Agent   (gets assigned after successful auth)
 
+// If there was an existing OAuth session, we restore it.
+// Otherwise, we present the login UI to the user.
 async function init() {
 	/* Set up form/button handlers */
 	document.getElementById("login-form").onsubmit = function(e) {
@@ -41,7 +43,7 @@ async function init() {
 	/* Set up the OAuth client */
 	try {
 		oac = await BrowserOAuthClient.load({
-			clientId,
+			clientId, // Note: This involves fetching the metadata document. See https://github.com/bluesky-social/atproto/tree/main/packages/oauth/oauth-client-browser#client-metadata for how to avoid this extra round-trip.
 			handleResolver: 'https://bsky.social',
 		});
 		const result = await oac.init();
@@ -125,9 +127,7 @@ async function doPost(message) {
 
 	const atUri = res.data.uri;
 	const [uriRepo, uriCollection, uriRkey] = atUri.split('/').slice(2);
-	const pdsHost = (await agent.sessionManager.getTokenInfo()).aud; // XXX: is this really the best way?
-
-	console.log(res);
+	const pdsHost = (await agent.sessionManager.getTokenInfo()).aud;
 
 	// hide the "post" screen
 	postButton.removeAttribute("aria-busy");
