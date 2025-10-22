@@ -2,7 +2,7 @@
 
 This example shows how to integrate ATProto OAuth login into a CLI app.
 
-While it is possible to use a localhost client ID for testing (see `go-oauth-web-app`), this example uses a publicly hosted client metadata document at `https://retr0.id/stuff/go-oauth-cli-app.json` (the client ID). The advantage of using a non-localhost client ID is that users can more easily manage the permissions and sessions associated with the app, from their account settings. If you wish to modify this example (for example, changing the requested scopes), you'll need to host your own metadata document somewhere.
+While it is possible to use a localhost client ID for testing (see `go-oauth-web-app`), this example uses a publicly hosted client metadata document at [`https://go-oauth-cli-app.bsky.dev/oauth-client-metadata.json`](https://go-oauth-cli-app.bsky.dev/oauth-client-metadata.json) (the client ID). The advantage of using a non-localhost client ID is that users can more easily manage the permissions and sessions associated with the app, from their account settings. If you wish to modify this example (for example, changing the requested scopes), you'll need to host your own metadata document somewhere (see `./static/oauth-client-metadata.json` for an example - you will need to change the `client_id` field too).
 
 Completing the OAuth login process requires recieving the callback redirect. This is done by listening on localhost at a random available port.
 

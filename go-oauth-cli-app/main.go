@@ -65,7 +65,7 @@ func prepareDbPath() (string, error) {
 
 func buildOAuthClient() (*oauth.ClientConfig, *oauth.ClientApp, *SqliteStore, error) {
 	config := oauth.ClientConfig{
-		ClientID:  "https://retr0.id/stuff/go-oauth-cli-app.json",
+		ClientID:  "https://go-oauth-cli-app.bsky.dev/oauth-client-metadata.json",
 		Scopes:    []string{"atproto", "repo:app.bsky.feed.post?action=create"},
 		UserAgent: "go-oauth-cli-app example",
 	}
