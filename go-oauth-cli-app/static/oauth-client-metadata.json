@@ -1,5 +1,5 @@
 {
-  "client_id": "https://retr0.id/stuff/go-oauth-cli-app.json",
+  "client_id": "https://go-oauth-cli-app.bsky.dev/oauth-client-metadata.json",
   "application_type": "native",
   "grant_types": [
     "authorization_code",
@@ -14,5 +14,5 @@
   ],
   "token_endpoint_auth_method": "none",
   "dpop_bound_access_tokens": true,
-  "client_name": "go-oauth-cli-app example"
+  "client_name": "go-oauth-cli-app cookbook example"
 }
