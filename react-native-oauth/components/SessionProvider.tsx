@@ -1,3 +1,7 @@
+import type {
+  ExpoOAuthClientInterface,
+  OAuthSession,
+} from '@atproto/oauth-client-expo'
 import * as store from 'expo-secure-store'
 import {
   PropsWithChildren,
@@ -7,8 +11,6 @@ import {
   useEffect,
   useState,
 } from 'react'
-import type { OAuthSession } from '@atproto/oauth-client'
-import type { ExpoOAuthClientInterface } from '@atproto/oauth-client-expo'
 
 const CURRENT_AUTH_DID = 'oauth_provider-current'
 
