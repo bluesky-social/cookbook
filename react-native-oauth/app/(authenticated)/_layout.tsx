@@ -4,7 +4,7 @@ import { PdsAgentProvider } from '@/components/PdsAgentProvider'
 export default function AuthenticatedLayout() {
   return (
     <PdsAgentProvider>
-      <Stack />
+      <Stack screenOptions={{ headerShown: false }} />
     </PdsAgentProvider>
   )
 }
