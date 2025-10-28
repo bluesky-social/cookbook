@@ -9,8 +9,11 @@ const { defineConfig } = require('rollup')
 const {
   bundleManifest,
 } = require('@atproto-labs/rollup-plugin-bundle-manifest')
+const copy = ((m) => m.default || m)(require('rollup-plugin-copy'))
 const postcss = ((m) => m.default || m)(require('rollup-plugin-postcss'))
 const serve = ((m) => m.default || m)(require('rollup-plugin-serve'))
+
+const tsconfig = require('./tsconfig.json')
 
 module.exports = defineConfig((commandLineArguments) => {
   const NODE_ENV =
@@ -22,10 +25,10 @@ module.exports = defineConfig((commandLineArguments) => {
   return {
     input: 'src/index.tsx',
     output: {
-      manualChunks: undefined,
-      sourcemap: true,
-      file: 'dist/index.js',
+      sourcemap: devMode,
       format: 'iife',
+      dir: 'dist',
+      entryFileNames: devMode ? '[name].js' : '[name]-[hash].js',
     },
     plugins: [
       {
@@ -43,7 +46,7 @@ module.exports = defineConfig((commandLineArguments) => {
         swc: {
           swcrc: false,
           configFile: false,
-          sourceMaps: true,
+          sourceMaps: devMode,
           minify: !devMode,
           jsc: {
             minify: {
@@ -54,7 +57,7 @@ module.exports = defineConfig((commandLineArguments) => {
               mangle: true,
             },
             externalHelpers: true,
-            target: 'es2020',
+            target: tsconfig.compilerOptions.target,
             parser: { syntax: 'typescript', tsx: true },
             transform: {
               useDefineForClassFields: true,
@@ -72,41 +75,47 @@ module.exports = defineConfig((commandLineArguments) => {
       html({
         title: 'OAuth Client Example',
         template: ({ attributes, files, meta, publicPath, title }) => `
-          <!DOCTYPE html>
-          <html${makeHtmlAttributes(attributes.html)}>
-          <head>
-            ${meta
-              .map((attrs) => `<meta${makeHtmlAttributes(attrs)}>`)
-              .join('\n')}
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>${title}</title>
-            ${files.css
-              .map(
-                (asset) =>
-                  `<link${makeHtmlAttributes({
-                    ...attributes.link,
-                    rel: 'stylesheet',
-                    href: `${publicPath}${asset.fileName}`,
-                  })}>`,
-              )
-              .join('\n')}
-          </head>
-          <body class="bg-slate-100 dark:bg-slate-800 min-h-screen">
-            <div id="root"></div>
-            ${files.js
-              .map(
-                (asset) =>
-                  `<script${makeHtmlAttributes({
-                    ...attributes.script,
-                    src: `${publicPath}${asset.fileName}`,
-                  })}></script>`,
-              )
-              .join('\n')}
-          </body>
-          </html>
-        `,
+            <!DOCTYPE html>
+            <html${makeHtmlAttributes(attributes.html)}>
+            <head>
+              ${meta
+                .map((attrs) => `<meta${makeHtmlAttributes(attrs)}>`)
+                .join('\n')}
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>${title}</title>
+              ${files.css
+                .map(
+                  (asset) =>
+                    `<link${makeHtmlAttributes({
+                      ...attributes.link,
+                      rel: 'stylesheet',
+                      href: `${publicPath}${asset.fileName}`,
+                    })}>`,
+                )
+                .join('\n')}
+            </head>
+            <body class="bg-slate-100 dark:bg-slate-800 min-h-screen">
+              <div id="root"></div>
+              ${files.js
+                .map(
+                  (asset) =>
+                    `<script${makeHtmlAttributes({
+                      ...attributes.script,
+                      src: `${publicPath}${asset.fileName}`,
+                    })}></script>`,
+                )
+                .join('\n')}
+            </body>
+            </html>
+          `,
       }),
       bundleManifest({ name: 'files.json', data: true }),
+      copy({
+        targets: [
+          { src: 'public/*', dest: 'dist' },
+          { src: 'oauth-client-metadata.json', dest: 'dist' },
+        ],
+      }),
 
       commandLineArguments.watch &&
         serve({
@@ -115,10 +124,5 @@ module.exports = defineConfig((commandLineArguments) => {
           headers: { 'Cache-Control': 'no-store' },
         }),
     ],
-    onwarn(warning, warn) {
-      // 'use client' directives are fine
-      if (warning.code === 'MODULE_LEVEL_DIRECTIVE') return
-      warn(warning)
-    },
   }
 })

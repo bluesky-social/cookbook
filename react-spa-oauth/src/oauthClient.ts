@@ -4,7 +4,7 @@ import {
   oauthClientMetadataSchema,
 } from '@atproto/oauth-client-browser'
 import { ENV, HANDLE_RESOLVER_URL } from './constants.ts'
-import clientMetadata from './oauth-client-metadata.json' with { type: 'json' }
+import clientMetadata from '../oauth-client-metadata.json' with { type: 'json' }
 
 // If the current page's origin is not included in the registered redirect URIs,
 // we assume we're running in a development environment and use the loopback

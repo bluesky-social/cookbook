@@ -63,7 +63,7 @@ For more information about client metadata, see [the Atproto documentation](http
 
 The `ExpoOAuthClient` client is configured in `utils/oauthClient.ts`. Make sure that the `clientMetadata` object matches the content of the `oauth-client-metadata.json` you are serving.
 
-The `handleResolver` can be set to any service that supports the `com.atproto.identity.resolveHandle` method. It is recommended to use a service under your control for improved privacy for your users. Alternatively, you can use a public resolver such as `https://bsky.social`.
+The `handleResolver` can be set to any service that supports the `com.atproto.identity.resolveHandle` XRPC method. It is recommended to use a service under your control for improved privacy for your users. Alternatively, you can use a public resolver such as `https://bsky.social`.
 
 ### Sign a user in
 
