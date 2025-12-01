@@ -8,7 +8,8 @@ A collection of example projects and scripts for getting started with atproto de
 * [Starter kit for a Bluesky bot (TypeScript)](/ts-bot/README.md)
 * [Download and Inspect Repository (Go)](/go-repo-export/README.md)
 * [OAuth Web Service (Python)](/python-oauth-web-app/README.md)
-
+* [OAuth Web Service (Go)](/go-oauth-web-app/README.md)
+* [OAuth CLI App (Go)](/go-oauth-cli-app/README.md)
 
 ## License
 
