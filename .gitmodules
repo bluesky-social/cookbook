@@ -1,0 +1,3 @@
+[submodule "nextjs-oauth"]
+	path = nextjs-oauth
+	url = https://github.com/bluesky-social/nextjs-oauth-tutorial
