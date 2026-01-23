@@ -1,0 +1,43 @@
+{
+  "name": "react-spa-atproto-oauth-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./dist/files.json"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@atproto-labs/rollup-plugin-bundle-manifest": "*",
+    "@atproto/oauth-client-browser": "*",
+    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-html": "^1.0.4",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-swc": "^0.4.0",
+    "@swc/helpers": "^0.5.15",
+    "@tanstack/react-query": "^5.71.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "rollup": "^4.13.0",
+    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-postcss": "^4.0.2",
+    "rollup-plugin-serve": "^1.1.1",
+    "tailwindcss": "^3.4.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "build": "rollup --config rollup.config.cjs",
+    "dev": "rollup --config rollup.config.cjs --watch"
+  },
+  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
+}
