@@ -10,6 +10,7 @@ A collection of example projects and scripts for getting started with atproto de
 * [OAuth Web Service (Python)](/python-oauth-web-app/README.md)
 * [OAuth Web Service (Go)](/go-oauth-web-app/README.md)
 * [OAuth CLI App (Go)](/go-oauth-cli-app/README.md)
+* [XRPC API Server (Go)](/go-xrpc-server/README.md)
 
 ## License
 
