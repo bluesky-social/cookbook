@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -19,11 +20,11 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 
 	"github.com/gorilla/sessions"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func main() {
-	app := cli.App{
+	app := cli.Command{
 		Name:   "oauth-web-demo",
 		Usage:  "atproto OAuth web server demo",
 		Action: runServer,
@@ -32,29 +33,31 @@ func main() {
 				Name:     "session-secret",
 				Usage:    "random string/token used for session cookie security",
 				Required: true,
-				EnvVars:  []string{"SESSION_SECRET"},
+				Sources:  cli.EnvVars("SESSION_SECRET"),
 			},
 			&cli.StringFlag{
 				Name:    "hostname",
 				Usage:   "public host name for this client (if not localhost dev mode)",
-				EnvVars: []string{"CLIENT_HOSTNAME"},
+				Sources: cli.EnvVars("CLIENT_HOSTNAME"),
 			},
 			&cli.StringFlag{
 				Name:    "client-secret-key",
 				Usage:   "confidential client secret key. should be P-256 private key in multibase encoding",
-				EnvVars: []string{"CLIENT_SECRET_KEY"},
+				Sources: cli.EnvVars("CLIENT_SECRET_KEY"),
 			},
 			&cli.StringFlag{
 				Name:    "client-secret-key-id",
 				Usage:   "key id for client-secret-key",
 				Value:   "primary",
-				EnvVars: []string{"CLIENT_SECRET_KEY_ID"},
+				Sources: cli.EnvVars("CLIENT_SECRET_KEY_ID"),
 			},
 		},
 	}
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(h))
-	app.RunAndExitOnError()
+	if err := app.Run(context.Background(), os.Args); err != nil {
+		fmt.Printf("error: %s", err)
+	}
 }
 
 type Server struct {
@@ -101,13 +104,13 @@ var tmplPostSuccess = template.Must(template.Must(template.New("post_success.htm
 var tmplErrorText string
 var tmplError = template.Must(template.Must(template.New("error.html").Parse(tmplBaseText)).Parse(tmplErrorText))
 
-func runServer(cctx *cli.Context) error {
+func runServer(ctx context.Context, cmd *cli.Command) error {
 
 	scopes := []string{"atproto", "repo:app.bsky.feed.post?action=create"}
 	bind := ":8080"
 
 	var config oauth.ClientConfig
-	hostname := cctx.String("hostname")
+	hostname := cmd.String("hostname")
 	if hostname == "" {
 		config = oauth.NewLocalhostConfig(
 			fmt.Sprintf("http://127.0.0.1%s/oauth/callback", bind),
@@ -123,12 +126,12 @@ func runServer(cctx *cli.Context) error {
 	}
 
 	// If a client secret key is provided (as a multibase string), turn this in to a confidential client
-	if cctx.String("client-secret-key") != "" && hostname != "" {
-		priv, err := atcrypto.ParsePrivateMultibase(cctx.String("client-secret-key"))
+	if cmd.String("client-secret-key") != "" && hostname != "" {
+		priv, err := atcrypto.ParsePrivateMultibase(cmd.String("client-secret-key"))
 		if err != nil {
 			return err
 		}
-		if err := config.SetClientSecret(priv, cctx.String("client-secret-key-id")); err != nil {
+		if err := config.SetClientSecret(priv, cmd.String("client-secret-key-id")); err != nil {
 			return err
 		}
 		slog.Info("configuring confidential OAuth client")
@@ -146,7 +149,7 @@ func runServer(cctx *cli.Context) error {
 	oauthClient := oauth.NewClientApp(&config, store)
 
 	srv := Server{
-		CookieStore: sessions.NewCookieStore([]byte(cctx.String("session-secret"))),
+		CookieStore: sessions.NewCookieStore([]byte(cmd.String("session-secret"))),
 		Dir:         identity.DefaultDirectory(),
 		OAuth:       oauthClient,
 	}
