@@ -42,7 +42,7 @@ func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(h))
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		fmt.Println("%s", err)
+		fmt.Println("error: %s", err)
 	}
 }
 
@@ -51,11 +51,10 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 	bind := ":8080"
 	serviceDID := cmd.String("service-did")
 	adminPasswords := cmd.StringSlice("admin-password")
-	dir := identity.DefaultDirectory()
 
 	svcAuth := auth.ServiceAuthValidator{
 		Audience:        serviceDID,
-		Dir:             dir,
+		Dir:             identity.DefaultDirectory(),
 		TimestampLeeway: time.Second * 5,
 	}
 
