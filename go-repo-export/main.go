@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/atclient"
 	"github.com/bluesky-social/indigo/atproto/atdata"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/repo"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/bluesky-social/indigo/xrpc"
+
 	"github.com/ipfs/go-cid"
 )
 
@@ -53,22 +54,20 @@ func carDownload(raw string) error {
 	// first look up the DID and PDS for this repo
 	fmt.Printf("resolving identity: %s\n", atid.String())
 	dir := identity.DefaultDirectory()
-	ident, err := dir.Lookup(ctx, *atid)
+	ident, err := dir.Lookup(ctx, atid)
 	if err != nil {
 		return err
 	}
 
 	// create a new API client to connect to the account's PDS
-	xrpcc := xrpc.Client{
-		Host: ident.PDSEndpoint(),
-	}
-	if xrpcc.Host == "" {
+	client := atclient.NewAPIClient(ident.PDSEndpoint())
+	if client.Host == "" {
 		return fmt.Errorf("no PDS endpoint for identity")
 	}
 
 	carPath := ident.DID.String() + ".car"
-	fmt.Printf("downloading from %s to: %s\n", xrpcc.Host, carPath)
-	repoBytes, err := comatproto.SyncGetRepo(ctx, &xrpcc, ident.DID.String(), "")
+	fmt.Printf("downloading from %s to: %s\n", client.Host, carPath)
+	repoBytes, err := comatproto.SyncGetRepo(ctx, client, ident.DID.String(), "")
 	if err != nil {
 		return err
 	}
@@ -186,22 +185,20 @@ func blobList(raw string) error {
 
 	// first look up the DID and PDS for this repo
 	dir := identity.DefaultDirectory()
-	ident, err := dir.Lookup(ctx, *atid)
+	ident, err := dir.Lookup(ctx, atid)
 	if err != nil {
 		return err
 	}
 
 	// create a new API client to connect to the account's PDS
-	xrpcc := xrpc.Client{
-		Host: ident.PDSEndpoint(),
-	}
-	if xrpcc.Host == "" {
+	client := atclient.NewAPIClient(ident.PDSEndpoint())
+	if client.Host == "" {
 		return fmt.Errorf("no PDS endpoint for identity")
 	}
 
 	cursor := ""
 	for {
-		resp, err := comatproto.SyncListBlobs(ctx, &xrpcc, cursor, ident.DID.String(), 500, "")
+		resp, err := comatproto.SyncListBlobs(ctx, client, cursor, ident.DID.String(), 500, "")
 		if err != nil {
 			return err
 		}
@@ -226,16 +223,14 @@ func blobDownloadAll(raw string) error {
 
 	// first look up the DID and PDS for this repo
 	dir := identity.DefaultDirectory()
-	ident, err := dir.Lookup(ctx, *atid)
+	ident, err := dir.Lookup(ctx, atid)
 	if err != nil {
 		return err
 	}
 
 	// create a new API client to connect to the account's PDS
-	xrpcc := xrpc.Client{
-		Host: ident.PDSEndpoint(),
-	}
-	if xrpcc.Host == "" {
+	client := atclient.NewAPIClient(ident.PDSEndpoint())
+	if client.Host == "" {
 		return fmt.Errorf("no PDS endpoint for identity")
 	}
 
@@ -245,7 +240,7 @@ func blobDownloadAll(raw string) error {
 
 	cursor := ""
 	for {
-		resp, err := comatproto.SyncListBlobs(ctx, &xrpcc, cursor, ident.DID.String(), 500, "")
+		resp, err := comatproto.SyncListBlobs(ctx, client, cursor, ident.DID.String(), 500, "")
 		if err != nil {
 			return err
 		}
@@ -255,7 +250,7 @@ func blobDownloadAll(raw string) error {
 				fmt.Printf("%s\texists\n", blobPath)
 				continue
 			}
-			blobBytes, err := comatproto.SyncGetBlob(ctx, &xrpcc, cidStr, ident.DID.String())
+			blobBytes, err := comatproto.SyncGetBlob(ctx, client, cidStr, ident.DID.String())
 			if err != nil {
 				return err
 			}
