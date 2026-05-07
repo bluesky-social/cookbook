@@ -228,9 +228,9 @@ def upload_images(
         with open(ip, "rb") as f:
             img_bytes = f.read()
         # this size limit specified in the app.bsky.embed.images lexicon
-        if len(img_bytes) > 1000000:
+        if len(img_bytes) > 2000000:
             raise Exception(
-                f"image file size too large. 1000000 bytes maximum, got: {len(img_bytes)}"
+                f"image file size too large. 2000000 bytes maximum, got: {len(img_bytes)}"
             )
         blob = upload_file(pds_url, access_token, ip, img_bytes)
         images.append({"alt": alt_text or "", "image": blob})
