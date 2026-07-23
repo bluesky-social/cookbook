@@ -15,11 +15,16 @@
 		}
 	</style>
 	<title>atproto OAuth Browser Client Example</title>
+	<!--
+		@atproto/api uses ?bundle-deps so esm.sh inlines its dependencies
+		(notably tlds, which it otherwise serves as a raw JSON module that
+		the browser rejects under strict MIME checking for module scripts).
+	-->
 	<script type="importmap">
 	{
 		"imports": {
-			"@atproto/oauth-client-browser": "https://esm.sh/@atproto/oauth-client-browser@0.3.29",
-			"@atproto/api": "https://esm.sh/@atproto/api@0.16.4"
+			"@atproto/oauth-client-browser": "https://esm.sh/@atproto/oauth-client-browser@0.4.9",
+			"@atproto/api": "https://esm.sh/@atproto/api@0.20.30?bundle-deps"
 		}
 	}
 	</script>
