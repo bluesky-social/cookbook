@@ -1,0 +1,12 @@
+{
+  "client_id": "https://app.example.com/oauth-client-metadata.json",
+  "client_name": "React SPA AT OAuth Example",
+  "client_uri": "https://app.example.com",
+  "redirect_uris": ["https://app.example.com/"],
+  "scope": "atproto account:email repo:* rpc:*?aud=did:web:api.bsky.app#bsky_appview",
+  "token_endpoint_auth_method": "none",
+  "response_types": ["code"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "application_type": "web",
+  "dpop_bound_access_tokens": true
+}
