@@ -1,8 +1,17 @@
 {
   "dependencies": {
-    "@atproto/api": "^0.6.20",
-    "cron": "^3.1.0",
-    "dotenv": "^16.3.1",
+    "@atproto/api": "^0.13.19",
     "process": "^0.11.10"
+  },
+  "scripts": {
+    "bot": "npx tsc && node --env-file=.env index.js",
+    "build": "npx tsc",
+    "setup": "echo '# Change the values inside of the quotes to the handle & password\n# for the account you wish to use as a bot.\nBLUESKY_HANDLE=\"@example.bsky.social\"   # Your handle\nBLUESKY_PASSWORD=\"Password123!\"         # You should use an app password!' > .env && echo 'Set your username and password in the `.env` file!'"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1"
   }
 }
