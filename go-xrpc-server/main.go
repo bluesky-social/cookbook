@@ -42,7 +42,7 @@ func main() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.SetDefault(slog.New(h))
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		fmt.Println("error: %s", err)
+		fmt.Println("error:", err)
 	}
 }
 
