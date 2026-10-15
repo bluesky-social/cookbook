@@ -391,7 +391,7 @@ def pds_authed_req(method: str, url: str, user: dict, db: Any, body=None) -> Any
     # Might need to retry request with a new nonce.
     for i in range(2):
         dpop_jwt = pds_dpop_jwt(
-            "POST",
+            method,
             url,
             access_token,
             dpop_pds_nonce,
@@ -399,7 +399,8 @@ def pds_authed_req(method: str, url: str, user: dict, db: Any, body=None) -> Any
         )
 
         with hardened_http.get_session() as sess:
-            resp = sess.post(
+            resp = sess.request(
+                method,
                 url,
                 headers={
                     "Authorization": f"DPoP {access_token}",
