@@ -1,8 +1,26 @@
 {
+  "name": "ts-bot",
+  "version": "1.0.0",
+  "description": "Starter template for a Bluesky bot using the @atproto/lex client",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lexicons": "lex install app.bsky.feed.post",
+    "build": "lex build --clear --index-file --import-ext .ts",
+    "typecheck": "tsc",
+    "prestart": "npm run build",
+    "start": "node index.ts"
+  },
   "dependencies": {
-    "@atproto/api": "^0.6.20",
+    "@atproto/lex": "^0.3.0",
+    "@atproto/lex-password-session": "^0.1.8",
     "cron": "^3.1.0",
-    "dotenv": "^16.3.1",
-    "process": "^0.11.10"
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.2"
   }
 }
