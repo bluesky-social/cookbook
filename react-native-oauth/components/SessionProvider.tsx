@@ -1,8 +1,9 @@
-import type {
-  ExpoOAuthClientInterface,
-  OAuthSession,
+import {
+  TokenRevokedError,
+  type ExpoOAuthClientInterface,
+  type OAuthSession,
 } from '@atproto/oauth-client-expo'
-import * as store from 'expo-secure-store'
+import { sessionStore as store } from '@/utils/sessionStore'
 import {
   PropsWithChildren,
   createContext,
@@ -42,6 +43,14 @@ export function SessionProvider({
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState<null | OAuthSession>(null)
 
+  // Forget our reference to the current session. The atproto client manages its
+  // own session storage (and removes a revoked session itself); this only clears
+  // the "last used account" pointer we keep to restore the session on restart.
+  const forgetSession = useCallback(async () => {
+    setSession(null)
+    await store.deleteItemAsync(CURRENT_AUTH_DID)
+  }, [])
+
   // Initialize by restoring the previously loaded session, if any.
   useEffect(() => {
     setInitialized(false)
@@ -59,9 +68,13 @@ export function SessionProvider({
         const restoredSession = await client.restore(lastDid, false)
         setSession(restoredSession)
 
-        // Force a refresh here, which will cause the session to be deleted
-        // by the "deleted" event handler if the refresh token was revoked
-        await restoredSession.getTokenInfo(true)
+        // Force a refresh here. If the refresh token was revoked, this throws a
+        // TokenRevokedError; the client will have already discarded its stored
+        // session, so we just forget our pointer to it.
+        await restoredSession.getTokenInfo(true).catch(async (err) => {
+          if (err instanceof TokenRevokedError) await forgetSession()
+          else throw err
+        })
       })
       .catch((err) => {
         console.warn('Error setting up OAuth Session', err)
@@ -70,25 +83,7 @@ export function SessionProvider({
         setInitialized(true)
         setLoading(false)
       })
-  }, [client])
-
-  // If the current session gets deleted (e.g. from another browser tab, or
-  // because a refresh token was revoked), clear it
-  useEffect(() => {
-    if (!session) return
-
-    const handleDelete = (event: CustomEvent<{ sub: string }>) => {
-      if (event.detail.sub === session.did) {
-        setSession(null)
-        void store.deleteItemAsync(CURRENT_AUTH_DID)
-      }
-    }
-
-    client.addEventListener('deleted', handleDelete)
-    return () => {
-      client.removeEventListener('deleted', handleDelete)
-    }
-  }, [client, session])
+  }, [client, forgetSession])
 
   // When initializing the AuthProvider, we used "false" as restore's refresh
   // argument so that the app can work off-line. The following effect will
@@ -97,17 +92,18 @@ export function SessionProvider({
   useEffect(() => {
     if (!session) return
 
-    // @NOTE If the refresh token was revoked, the "deleted" event will be
-    // triggered on the client, causing the previous effect to clear the session
     const check = () => {
-      void session.getTokenInfo(true).catch((err) => {
-        console.warn('Failed to refresh token', err)
+      void session.getTokenInfo(true).catch(async (err) => {
+        // If the refresh token was revoked (e.g. from another device), the
+        // client discards its stored session; forget our pointer to it too.
+        if (err instanceof TokenRevokedError) await forgetSession()
+        else console.warn('Failed to refresh token', err)
       })
     }
 
     const interval = setInterval(check, 10 * 60e3)
     return () => clearInterval(interval)
-  }, [session])
+  }, [session, forgetSession])
 
   const signIn = useCallback(
     async (input: string) => {

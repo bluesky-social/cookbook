@@ -1,7 +1,8 @@
+import { type AtIdentifierString } from '@atproto/lex'
 import { useQuery } from '@tanstack/react-query'
 import { Button, Image, Text, View } from 'react-native'
-import { useBskyAgent } from '@/components/BskyAgentProvider'
-import { usePdsAgent } from '@/components/PdsAgentProvider'
+import { app, com } from '@/src/lexicons'
+import { useClient } from '@/components/ClientProvider'
 import { useOAuthSession, useSession } from '@/components/SessionProvider'
 
 /**
@@ -49,20 +50,19 @@ function AccountInfo() {
 }
 
 function useGetSessionQuery() {
-  const agent = usePdsAgent()
+  const client = useClient()
 
   return useQuery({
-    queryKey: [agent.did, 'session'] as const,
+    queryKey: [client.assertDid, 'session'] as const,
     queryFn: async ({ signal }) => {
-      const response = await agent.com.atproto.server.getSession(undefined, {
-        signal,
-      })
-      return response.data
+      // `service: null` opts this call out of the client's appview proxying:
+      // getSession is answered by the user's PDS itself.
+      return client.call(com.atproto.server.getSession, {}, { signal, service: null })
     },
   })
 }
 
-function ProfileCard({ actor }: { actor: string }) {
+function ProfileCard({ actor }: { actor: AtIdentifierString }) {
   const { data } = useProfileQuery(actor)
 
   return (
@@ -93,14 +93,13 @@ function ProfileCard({ actor }: { actor: string }) {
   )
 }
 
-function useProfileQuery(actor: string) {
-  const agent = useBskyAgent()
+function useProfileQuery(actor: AtIdentifierString) {
+  const client = useClient()
 
   return useQuery({
     queryKey: ['profile', actor] as const,
     queryFn: async ({ signal }) => {
-      const response = await agent.getProfile({ actor }, { signal })
-      return response.data
+      return client.call(app.bsky.actor.getProfile, { actor }, { signal })
     },
   })
 }

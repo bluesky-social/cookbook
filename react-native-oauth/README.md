@@ -13,8 +13,10 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
 2. Start the app
 
    ```bash
-   npx expo start
+   npm start
    ```
+
+   This generates the typed Lexicon schemas (see [Lexicon codegen](#lexicon-codegen)) and then starts Expo. Use `npm start` rather than `npx expo start` directly, so the `src/lexicons/` code is generated first.
 
 In the output, you'll find options to open the app in a
 
@@ -77,13 +79,26 @@ The `SessionContext` context provides a `signIn(input)` method that can be used 
 
 ### Making authenticated requests
 
-Once a user is signed in, you can create an `Agent` instance using the OAuth session.
+This project uses the [`@atproto/lex`](https://github.com/bluesky-social/atproto/tree/main/packages/lex) client stack for API calls. Once a user is signed in, you can create a `Client` (imported from `@atproto/lex`) from the OAuth session. An `OAuthSession` already satisfies the client's `Agent` interface (it exposes `did` and `fetchHandler`), so it can be passed straight into `new Client(session)` with no adapter.
 
-The `PdsAgentProvider` component in `components/PdsAgentProvider.tsx` demonstrates how to create an `Agent` that can be used to make authenticated requests to the user's PDS.
+The `ClientProvider` component in `components/ClientProvider.tsx` creates a single `Client` that covers both the user's PDS and the Bluesky appview. It is constructed with the `service: 'did:web:api.bsky.app#bsky_appview'` option, which routes requests through the user's PDS to the appview (by setting the `atproto-proxy` header):
 
-The `BskyAgentProvider` component in `components/BskyAgentProvider.tsx` demonstrates how to create a `BskyAgent` that can be used to interact with a dedicated appview (the Bluesky public API in this case).
+- Plain xrpc calls made with `client.call(...)` are proxied to the appview.
+- Record sugar methods like `client.create(...)` are never proxied and always target the user's PDS.
+- Any other call can opt out of proxying with a per-call `service: null` option (the app does this for `com.atproto.server.getSession`, which the PDS answers itself).
 
-An example of using both agents can be found in `app/(authenticated)/index.tsx`.
+Requests are made with `client.call(schema, params)`, e.g. `client.call(app.bsky.actor.getProfile, { actor })`, where `schema` comes from the generated lexicons (see below). `client.call(...)` resolves to the response body directly.
+
+An example of using the client can be found in `app/(authenticated)/index.tsx`.
+
+### Lexicon codegen
+
+The app talks to the network using generated, type-safe schemas:
+
+- **`lexicons/`** and **`lexicons.json`** (checked in) — the Lexicon JSON for the methods this app calls (`app.bsky.actor.getProfile` and `com.atproto.server.getSession`) and their dependencies, fetched with `npm run lexicons` (`lex install`).
+- **`src/lexicons/`** (generated, gitignored) — TypeScript produced by `npm run codegen` (`lex build`). This is what gives `client.call(...)` its compile-time-checked params and response types.
+
+The `pre*` npm scripts run `npm run codegen` automatically before `npm start` / `npm run android` / `ios` / `web`, so you never have to generate by hand. To call more methods later, add their NSIDs to the `lexicons` script, run `npm run lexicons`, then rebuild.
 
 ## Possible improvements
 

@@ -1,10 +1,10 @@
 import { Stack } from 'expo-router'
-import { PdsAgentProvider } from '@/components/PdsAgentProvider'
+import { ClientProvider } from '@/components/ClientProvider'
 
 export default function AuthenticatedLayout() {
   return (
-    <PdsAgentProvider>
+    <ClientProvider>
       <Stack screenOptions={{ headerShown: false }} />
-    </PdsAgentProvider>
+    </ClientProvider>
   )
 }

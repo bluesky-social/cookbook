@@ -4,6 +4,13 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
+    "lexicons": "lex install app.bsky.actor.getProfile com.atproto.server.getSession",
+    "codegen": "lex build --index-file --clear --import-ext \"\"",
+    "typecheck": "tsc --noEmit",
+    "prestart": "npm run codegen",
+    "preandroid": "npm run codegen",
+    "preios": "npm run codegen",
+    "preweb": "npm run codegen",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -11,8 +18,8 @@
     "lint": "expo lint"
   },
   "dependencies": {
-    "@atproto/api": "^0.16.11",
-    "@atproto/oauth-client-expo": "^0.0.2",
+    "@atproto/lex": "^0.3.0",
+    "@atproto/oauth-client-expo": "^0.1.8",
     "@expo/metro-runtime": "~6.1.2",
     "@expo/vector-icons": "^15.0.2",
     "@react-navigation/bottom-tabs": "^7.4.0",
@@ -34,7 +41,7 @@
     "expo-web-browser": "~15.0.7",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native": "0.81.4",
+    "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",

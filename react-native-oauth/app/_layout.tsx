@@ -1,4 +1,3 @@
-import { BskyAgentProvider } from '@/components/BskyAgentProvider'
 import { SessionProvider, useSession } from '@/components/SessionProvider'
 import { oauthClient } from '@/utils/oauthClient'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -10,9 +9,7 @@ export default function Layout() {
   return (
     <SessionProvider client={oauthClient}>
       <QueryClientProvider client={queryClient}>
-        <BskyAgentProvider>
-          <RootNavigator />
-        </BskyAgentProvider>
+        <RootNavigator />
       </QueryClientProvider>
     </SessionProvider>
   )
