@@ -1,0 +1,22 @@
+{
+  "name": "ts-private-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lex": "lex install community.lexicon.calendar.collection community.lexicon.calendar.event && lex build",
+    "cli": "tsx src/index.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@atproto/lex": "^0.6.1",
+    "@atproto/lex-password-session": "^0.3.5",
+    "@atproto/lex-space": "^0.0.1",
+    "dotenv": "^18.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
