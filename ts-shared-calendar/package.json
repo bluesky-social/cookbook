@@ -1,0 +1,22 @@
+{
+  "name": "ts-shared-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lex": "lex install community.lexicon.calendar.collection community.lexicon.calendar.event community.lexicon.calendar.rsvp && lex build",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@atproto/lex": "^0.6.1",
+    "@atproto/lex-space": "^0.0.1",
+    "@atproto/oauth-client-node": "^0.5.19",
+    "@bsky/space-sync": "*",
+    "dotenv": "^18.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
